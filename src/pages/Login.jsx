@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 export default function Login() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   function handleSubmit(e) {
     e.preventDefault(); // stops the page from reloading
-    alert("Login works in Phase 2, when we connect Supabase!");
+    navigate("/dashboard");
   }
 
   return (
