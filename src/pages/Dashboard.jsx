@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { courses, student, getAllLessons, getProgress } from "../data/courses";
+import { courses, student, getAllLessons, getProgress, resetDemo } from "../data/courses";
 
 export default function Dashboard() {
   // Courses the student owns, and courses they don't
@@ -57,6 +57,7 @@ export default function Dashboard() {
           </div>
         </>
       )}
+      <button className="btn btn-outline btn-sm" style={{ marginTop: 48 }} onClick={resetDemo}>Reset demo</button>
     </div>
   );
 }

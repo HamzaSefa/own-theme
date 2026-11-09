@@ -2,17 +2,17 @@ import { Link } from "react-router-dom";
 
 const courses = [
   {
-    id: 1, tag: "COURSE 01", title: "Short Form & Social Media",
+    id: 1, slug: "short-form", tag: "COURSE 01", title: "Short Form & Social Media",
     desc: "Build a format of your own instead of renting a trend.",
     meta: "28 lessons · CapCut + Premiere Pro",
   },
   {
-    id: 2, tag: "COURSE 02", title: "Long Form & YouTube",
+    id: 2, slug: "long-form", tag: "COURSE 02", title: "Long Form & YouTube",
     desc: "Hold attention for ten minutes with a channel look you designed.",
     meta: "32 lessons · Premiere Pro",
   },
   {
-    id: 3, tag: "COURSE 03", title: "Film & Documentary",
+    id: 3, slug: "film-doc", tag: "COURSE 03", title: "Film & Documentary",
     desc: "Edit with a point of view and an ethic.",
     meta: "32 lessons · DaVinci Resolve",
   },
@@ -59,7 +59,7 @@ export default function Home() {
               <h3>{course.title}</h3>
               <p>{course.desc}</p>
               <div className="meta">{course.meta}</div>
-              <a href="#" className="btn btn-primary">Learn more</a>
+              <Link to={`/courses/${course.slug}`} className="btn btn-primary">Learn more</Link>
             </div>
           ))}
         </div>

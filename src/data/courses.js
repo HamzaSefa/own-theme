@@ -69,14 +69,32 @@ export const courses = [
   },
 ];
 
-// Pretend student. Only enrolled in 2 of the 3 courses.
+// Pretend student. localStorage keeps purchases after a page refresh.
+const saved = localStorage.getItem("ownTheme_enrolled");
+
 export const student = {
   name: "Abdulhafiz",
-  enrolled: [
-    { courseId: "short-form", completed: ["sf-0-1", "sf-0-2", "sf-0-3"] },
-    { courseId: "long-form", completed: ["lf-0-1"] },
-  ],
+  enrolled: saved
+    ? JSON.parse(saved)
+    : [
+        { courseId: "short-form", completed: ["sf-0-1", "sf-0-2", "sf-0-3"] },
+        { courseId: "long-form", completed: ["lf-0-1"] },
+      ],
 };
+
+// Called after a (fake) payment succeeds
+export function enroll(courseId) {
+  if (!student.enrolled.some((e) => e.courseId === courseId)) {
+    student.enrolled.push({ courseId, completed: [] });
+    localStorage.setItem("ownTheme_enrolled", JSON.stringify(student.enrolled));
+  }
+}
+
+// Wipes the demo so you can show the purchase again
+export function resetDemo() {
+  localStorage.removeItem("ownTheme_enrolled");
+  window.location.reload();
+}
 
 // Helper 1: turn modules into one flat list of lessons
 export function getAllLessons(course) {

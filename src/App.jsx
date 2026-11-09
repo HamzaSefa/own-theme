@@ -7,6 +7,8 @@ import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import Classroom from "./pages/Classroom";
 import Admin from "./pages/Admin";
+import CourseDetail from "./pages/CourseDetail";
+import Checkout from "./pages/Checkout";
 
 function App() {
   const location = useLocation();
@@ -23,6 +25,8 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/classroom/:courseId/:lessonId" element={<Classroom />} />
         <Route path="/admin" element={<Admin />} />
+        <Route path="/courses/:courseId" element={<CourseDetail />} />
+        <Route path="/checkout/:courseId" element={<Checkout />} />
       </Routes>
       {!inClassroom && <Footer />}
     </>
