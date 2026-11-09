@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useParams, Navigate } from "react-router-dom";
 import { courses, enroll } from "../data/courses";
-import { prices } from "../data/admin";
+import { prices, bundlePrice } from "../data/admin";
 
 const methods = [
   { id: "mobile", label: "📱 Mobile money (e.g. Telebirr)" },
@@ -11,19 +11,26 @@ const methods = [
 
 export default function Checkout() {
   const { courseId } = useParams();
-  const course = courses.find((c) => c.id === courseId);
+  const isBundle = courseId === "bundle";
+  const course = isBundle
+  ? { id: "bundle", title: "Complete Bundle (all 3 courses)" }
+  : courses.find((c) => c.id === courseId);
   const [method, setMethod] = useState("mobile");
   const [step, setStep] = useState("form"); // "form" -> "processing" -> "done"
 
   if (!course) return <Navigate to="/" />;
-  const price = prices[courseId];
+  const price = isBundle ? bundlePrice : prices[courseId];
 
   function pay(e) {
     e.preventDefault();
     setStep("processing");
     // Pretend the bank takes 2 seconds, then unlock the course
     setTimeout(() => {
-      enroll(courseId);
+      if (isBundle) {
+  courses.forEach((c) => enroll(c.id));
+} else {
+  enroll(courseId);
+}
       setStep("done");
     }, 2000);
   }
