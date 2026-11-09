@@ -9,6 +9,8 @@ export default function Navbar() {
           <a href="/#courses">Courses</a>
           <Link to="/login">Login</Link>
           <Link to="/signup" className="btn btn-primary">Sign up</Link>
+          <Link to="/dashboard">Dashboard</Link>
+          <Link to="/admin">Admin</Link>
         </nav>
       </div>
     </header>

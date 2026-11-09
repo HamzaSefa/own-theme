@@ -6,10 +6,12 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import Classroom from "./pages/Classroom";
+import Admin from "./pages/Admin";
 
 function App() {
   const location = useLocation();
-  const inClassroom = location.pathname.startsWith("/classroom");
+  const inClassroom =
+  location.pathname.startsWith("/classroom") || location.pathname.startsWith("/admin");
 
   return (
     <>
@@ -20,6 +22,7 @@ function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/classroom/:courseId/:lessonId" element={<Classroom />} />
+        <Route path="/admin" element={<Admin />} />
       </Routes>
       {!inClassroom && <Footer />}
     </>
