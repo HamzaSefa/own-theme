@@ -2,24 +2,15 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import Reveal from "../components/Reveal";
 import { prices, bundlePrice } from "../data/admin";
+import { courses as courseCatalog, isPublicCourse } from "../data/courses";
+import { adminStorageKeys, readAdminData } from "../data/adminWorkspace";
+import { faq } from "../data/details";
 
-const courses = [
-  {
-    id: 1, slug: "short-form", tag: "COURSE 01", title: "Short Form & Social Media",
-    desc: "Build a format of your own instead of renting a trend.",
-    meta: "28 lessons · CapCut + Premiere Pro",
-  },
-  {
-    id: 2, slug: "long-form", tag: "COURSE 02", title: "Long Form & YouTube",
-    desc: "Hold attention for ten minutes with a channel look you designed.",
-    meta: "32 lessons · Premiere Pro",
-  },
-  {
-    id: 3, slug: "film-doc", tag: "COURSE 03", title: "Film & Documentary",
-    desc: "Edit with a point of view and an ethic.",
-    meta: "32 lessons · DaVinci Resolve",
-  },
-];
+const courseArtwork = {
+  "short-form": "CUT / 9:16",
+  "long-form": "FRAME / 16:9",
+  "film-doc": "SCENE / 24FPS",
+};
 
 const themeStack = [
   { n: "01", name: "Premise", q: "What is this about, and what should the viewer feel at the end?" },
@@ -30,60 +21,152 @@ const themeStack = [
   { n: "06", name: "Signature", q: "What one move do you repeat so people recognize your work?" },
 ];
 
-// SAMPLE content. Replace with real student work (with permission) after the pilot.
-const showcase = [
-  { layer: "PREMISE", who: "Sample · Short Form student", before: "Make it look cool.", after: "Pressure. I want them tense, then relieved." },
-  { layer: "SOUND", who: "Sample · Long Form student", before: "Add whatever music is trending.", after: "Room tone and breathing. No music until the last ten seconds." },
-  { layer: "SIGNATURE", who: "Sample · Film student", before: "Use the transition everyone uses.", after: "I always cut away one beat before they expect it." },
+const editDecisions = [
+  {
+    number: "01",
+    name: "Story",
+    direction: "Give the moment a point.",
+    result: "Choose the detail that changes what a scene means, not simply the prettiest shot.",
+  },
+  {
+    number: "02",
+    name: "Pacing",
+    direction: "Let the feeling set the tempo.",
+    result: "Hold on a reaction for tension; cut faster only when the story earns the speed.",
+  },
+  {
+    number: "03",
+    name: "Sound",
+    direction: "Make silence a decision.",
+    result: "Keep the room tone, let a breath land, and bring music in when the emotion turns.",
+  },
+  {
+    number: "04",
+    name: "Color",
+    direction: "Build a look from the premise.",
+    result: "Shape temperature and contrast to support the scene instead of reaching for a preset.",
+  },
 ];
 
 export default function Home() {
-  const [reelOn, setReelOn] = useState(false);
-
-  // Bundle maths: add up the three prices, then subtract the bundle price
-  const total = Object.values(prices).reduce((sum, p) => sum + p, 0);
-  const saving = total - bundlePrice;
+  const [reelNote, setReelNote] = useState(false);
+  const courses = courseCatalog.filter(isPublicCourse).map((course, index) => ({
+    ...course,
+    slug: course.slug || course.id,
+    tag: course.tag || `COURSE ${String(index + 1).padStart(2, "0")}`,
+    desc: course.description || course.desc || "Build a style of your own with practical, project-based editing lessons.",
+    visual: courseArtwork[course.id] || "OWN THE FRAME",
+    lessonCount: course.modules.reduce((total, module) => total + module.lessons.length, 0),
+  }));
+  const siteSettings = readAdminData(adminStorageKeys.settings, {});
+  const plans = readAdminData(adminStorageKeys.plans, { membershipStatus: "Coming soon", membershipPrice: "" });
+  const selectedShowcase = [
+    ...readAdminData(adminStorageKeys.assignments, []).filter(
+      (item) => item.showcasePublished && item.showcaseConsent && /^https?:\/\//i.test(item.url || ""),
+    ),
+    ...readAdminData(adminStorageKeys.showcaseProjects, [])
+      .filter((item) => item.showcasePublished && item.showcaseConsent && /^https?:\/\//i.test(item.mediaUrl || item.url || ""))
+      .map((item) => ({ ...item, url: item.mediaUrl || item.url, notes: item.description || "" })),
+  ];
+  const headline = siteSettings.homeHeadline || "You don't have to follow a theme. Build one.";
+  const highlightedPhrase = "Build one.";
+  const highlightIndex = headline.indexOf(highlightedPhrase);
+  const allCoursePricesSet = courses.every((course) =>
+    (course.price !== "" && course.price != null) || prices[course.id] != null
+  );
+  const total = courses.reduce((sum, course) => sum + Number(
+    course.price !== "" && course.price != null ? course.price : prices[course.id] ?? 0
+  ), 0);
+  const saving = allCoursePricesSet ? total - bundlePrice : 0;
+  const completeBundleAvailable = courseCatalog.length === 3
+    && courses.length === 3
+    && courses.every((course) => course.purchaseOption !== "Subscription included");
+  const membershipAvailable = plans.membershipStatus === "Available"
+    && Boolean(plans.membershipPrice?.trim())
+    && Boolean(plans.membershipBillingCycle?.trim())
+    && Boolean(plans.membershipAccess?.trim())
+    && Boolean(plans.membershipRenewalTerms?.trim());
 
   return (
     <>
-      {/* ===== Hero ===== */}
       <div className="hero-wrap">
         <div className="container">
           <section className="hero">
-            <span className="badge">3 courses · 1 free mini-course</span>
-            <h1>You don't have to follow a theme. <span>Build one.</span></h1>
-            <p>Three video editing courses that teach you to design your own style, not copy a template.</p>
-            <div className="hero-btns">
-              <a href="#courses" className="btn btn-primary">Explore courses</a>
-              <a href="#showreel" className="btn btn-outline">Watch showreel</a>
+            <div className="hero-copy">
+              <span className="badge"><span className="badge-dot" />{courses.length} courses · 1 free mini-course</span>
+              <h1>{highlightIndex >= 0
+                ? <>{headline.slice(0, highlightIndex)}<span>{highlightedPhrase}</span>{headline.slice(highlightIndex + highlightedPhrase.length)}</>
+                : headline}</h1>
+              <p>{siteSettings.homeDescription || "Three video editing courses that teach you to design your own style, not copy a template."}</p>
+              <div className="hero-btns">
+                <Link to="/courses" className="btn btn-primary">Explore Courses <span aria-hidden="true">↗</span></Link>
+                <a href="#showreel" className="btn btn-outline"><span className="hero-play" aria-hidden="true">▶</span> Watch showreel</a>
+              </div>
+              <div className="hero-proof">
+                <span>CRAFT OVER COPY</span><i /><span>YOUR STYLE, BUILT BY YOU</span>
+              </div>
+            </div>
+
+            <div className="hero-visual">
+              <img src="/editor-studio.svg" alt="Cinematic video editing studio with a film viewer and editing timeline" />
+              <div className="visual-label visual-label-top"><span className="visual-live" /> THE EDITING ROOM</div>
+              <div className="visual-card">
+                <span className="visual-card-mark">OT / 01</span>
+                <span>Every cut<br />says something.</span>
+              </div>
+              <div className="visual-caption">
+                <span>01 — FIND YOUR POINT OF VIEW</span>
+                <span className="visual-caption-line" />
+                <span>OWN THE FRAME</span>
+              </div>
             </div>
           </section>
         </div>
       </div>
 
-      {/* ===== Showreel ===== */}
-      <section id="showreel" className="container section">
+      <section id="showreel" className="container section brand-section">
         <Reveal>
-          <h2 className="section-title">See what's possible</h2>
-          <div className="reel">
-            <div className="reel-inner">
-              <button className="play" onClick={() => setReelOn(!reelOn)}>▶</button>
-              <strong>{reelOn ? "Your showreel plays here" : "Own Theme showreel"}</strong>
-              <span>
-                {reelOn
-                  ? "The real video will be embedded from a private video host."
-                  : "Tap play to preview"}
-              </span>
+          <div className="brand-grid">
+            <div className="brand-copy">
+              <span className="eyebrow">03 / A DIFFERENT KIND OF EDITING SCHOOL</span>
+              <h2>Presets can change a picture. <span>They can't give it a point of view.</span></h2>
+              <p>
+                A familiar transition can make an edit look polished, but style
+                comes from knowing why a shot stays, when a sound enters, and
+                what feeling the cut should leave behind.
+              </p>
+              <p>
+                Own Theme teaches the thinking behind the tools, so you can
+                borrow techniques, break patterns, and make choices that feel
+                like yours.
+              </p>
+              <Link to="/about" className="text-link">Our philosophy <span aria-hidden="true">↗</span></Link>
+            </div>
+            <div className="brand-film">
+              <div className="brand-film-frame">
+                <span className="film-kicker">OWN THE FRAME / STUDY 001</span>
+                <div className="film-title">A cut is<br /><em>a choice.</em></div>
+                <div className="film-sun" />
+                <div className="film-horizon" />
+                <span className="film-timecode">00:01:24:08</span>
+              </div>
+              <div className="brand-film-caption">
+                <span className="film-play-mark">▶</span>
+                <span>{reelNote ? "A real showreel is coming soon." : "A point of view, in every frame."}</span>
+                <button onClick={() => setReelNote(!reelNote)} aria-label="Show showreel note">↗</button>
+              </div>
             </div>
           </div>
         </Reveal>
       </section>
 
-      {/* ===== Theme Stack ===== */}
-      <section className="container section">
+      <section className="container section method-section">
         <Reveal>
-          <h2 className="section-title">The Theme Stack</h2>
-          <p className="section-sub">Six questions you answer, and revise, in every course. By the end, you hold a style sheet you wrote yourself.</p>
+          <div className="section-heading">
+            <span className="eyebrow">04 / THE OWN THEME METHOD</span>
+            <h2 className="section-title">A style is a system of choices.</h2>
+            <p className="section-sub">The Theme Stack gives you six creative elements to question, test, and make your own in every edit.</p>
+          </div>
           <div className="stack-grid">
             {themeStack.map((item) => (
               <div className="stack-item" key={item.n}>
@@ -96,115 +179,166 @@ export default function Home() {
         </Reveal>
       </section>
 
-      {/* ===== Courses ===== */}
-      <section id="courses" className="container">
+      <section id="courses" className="container section courses-section">
         <Reveal>
-          <h2 className="section-title">Choose your course</h2>
-          <div className="course-grid">
-            {courses.map((course) => (
-              <div className="card" key={course.id}>
-                <div className="tag">{course.tag}</div>
-                <h3>{course.title}</h3>
-                <p>{course.desc}</p>
-                <div className="meta">{course.meta}</div>
-                <Link to={`/courses/${course.slug}`} className="btn btn-primary">Learn more</Link>
-              </div>
+          <div className="section-heading">
+            <span className="eyebrow">05 / THREE LEARNING TRACKS</span>
+            <h2 className="section-title">Choose the stories you want to tell.</h2>
+            <p className="section-sub">Focused courses for different formats, connected by one method: build a visual language that belongs to you.</p>
+          </div>
+          <div className="course-grid featured-course-grid">
+            {courses.map((course, index) => (
+              <article className={`card featured-course course-${course.slug}`} key={course.id}>
+                <div className="course-card-top"><div className="tag">{course.tag}</div><span className="course-index">{String(index + 1).padStart(2, "0")}</span></div>
+                <div className="course-art" aria-hidden="true" style={course.thumbnail ? { backgroundImage: `linear-gradient(0deg,rgba(8,12,11,.35),rgba(8,12,11,.05)),url("${course.thumbnail}")` } : undefined}><span>{course.visual}</span><i /><b /></div>
+                <div className="course-card-copy">
+                  <h3>{course.title}</h3>
+                  <p>{course.desc}</p>
+                  <div className="meta">{course.lessonCount ? `${course.lessonCount} lessons` : "Curriculum coming soon"}</div>
+                  <Link to={`/courses/${course.slug}`} className="course-card-link">Explore this track <span aria-hidden="true">↗</span></Link>
+                </div>
+              </article>
             ))}
           </div>
+          <div className="course-section-link"><Link to="/courses" className="text-link">View all courses <span aria-hidden="true">↗</span></Link></div>
         </Reveal>
       </section>
 
-      {/* ===== Student showcase ===== */}
-      <section className="container section">
+      <section className="transformation-section">
         <Reveal>
-          <h2 className="section-title">From copying to deciding</h2>
-          <p className="section-sub">Sample Theme Sheet entries, before and after. This is the shift every student makes.</p>
-          <div className="show-grid">
-            {showcase.map((s) => (
-              <div className="show-card" key={s.layer}>
-                <div className="eyebrow">{s.layer}</div>
-                <div className="who">{s.who}</div>
-                <div className="ba before"><small>BEFORE</small>{s.before}</div>
-                <div className="ba after"><small>AFTER</small>{s.after}</div>
-              </div>
-            ))}
-          </div>
-        </Reveal>
-      </section>
-
-      {/* ===== Pricing & bundle ===== */}
-      <section id="pricing" className="container section">
-        <Reveal>
-          <h2 className="section-title">Simple pricing</h2>
-          <p className="section-sub">One payment. Lifetime access. Pick one course or save with the bundle.</p>
-
-          <div className="price-grid">
-            {courses.map((course) => (
-              <div className="card" key={course.id}>
-                <div className="tag">{course.tag}</div>
-                <h3>{course.title}</h3>
-                <div className="price">${prices[course.slug]} <small>one-time</small></div>
-                <ul className="check-list">
-                  <li>{course.meta}</li>
-                  <li>Certificate of completion</li>
-                  <li>Lifetime access</li>
-                </ul>
-                <Link to={`/courses/${course.slug}`} className="btn btn-outline">View course</Link>
-              </div>
-            ))}
-          </div>
-
-          <div className="bundle-card">
-            <div>
-              <div className="eyebrow">BEST VALUE</div>
-              <h3>The complete bundle</h3>
-              <p>All three courses, one payment. Go from short form to YouTube to film.</p>
+          <div className="container">
+            <div className="section-heading">
+              <span className="eyebrow">06 / THE EDITING TRANSFORMATION</span>
+              <h2 className="section-title">Same footage. More intentional choices.</h2>
+              <p className="section-sub">Storytelling, pacing, sound, and color don't decorate an edit. They shape what the audience feels.</p>
             </div>
-            <div>
-              <div className="price">
-                ${bundlePrice}
-                <span className="was">${total}</span>
-                <span className="save">Save ${saving}</span>
-              </div>
-              <Link to="/checkout/bundle" className="btn btn-primary" style={{ marginTop: 12 }}>
-                Get the bundle
-              </Link>
+            <div className="transformation-grid">
+              {editDecisions.map((item) => (
+                <article className="transformation-card" key={item.number}>
+                  <span className="transformation-number">{item.number}</span>
+                  <span className="eyebrow">{item.name}</span>
+                  <h3>{item.direction}</h3>
+                  <p>{item.result}</p>
+                  <span className="transformation-rule" />
+                </article>
+              ))}
             </div>
           </div>
         </Reveal>
       </section>
 
-      {/* ===== Teacher ===== */}
-      <section className="container section">
+      <section id="showcase" className="container section home-showcase-section">
         <Reveal>
-          <div className="teacher">
-            <div className="avatar">A</div>
-            <div>
-              <div className="eyebrow">YOUR TEACHER</div>
-              <h2>Abdulhafiz Zekeriya</h2>
-              <p>
-                Video editor and course creator. Own Theme exists because too many editors copy presets
-                instead of making their own decisions. Every lesson teaches the decision first and the
-                buttons second. (Replace this with the real bio and a photo.)
-              </p>
-              <div className="pills">
-                <span className="pill">Premiere Pro</span>
-                <span className="pill">After Effects</span>
-                <span className="pill">DaVinci Resolve</span>
-                <span className="pill">CapCut</span>
-              </div>
+          <div className="section-heading">
+            <span className="eyebrow">07 / STUDENT SHOWCASE</span>
+            <h2 className="section-title">The thinking behind the finished frame.</h2>
+            <p className="section-sub">Selected student projects are shared only with permission. Each feature includes the creative decision behind the edit.</p>
+          </div>
+          {selectedShowcase.length ? (
+            <div className="student-showcase-grid">
+              {selectedShowcase.slice(0, 3).map((item) => (
+                <article className="student-project-card" key={item.id}>
+                  <a className="student-project-link" href={item.url} target="_blank" rel="noreferrer">
+                    <span className="student-project-icon">▶</span><span>VIEW PROJECT ↗</span>
+                  </a>
+                  <div className="student-project-copy">
+                    <span className="eyebrow">{courses.find((course) => course.slug === item.courseId || course.id === item.courseId)?.title || "STUDENT PROJECT"}</span>
+                    <h3>{item.title}</h3>
+                    <p>{item.notes || "A student edit shaped by a deliberate creative point of view."}</p>
+                    <span className="student-credit">Shared by the student · Own Theme</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="showcase-coming">
+              <span className="showcase-coming-mark">OT / SHOWCASE</span>
+              <h3>Student projects are on the way.</h3>
+              <p>We'll feature selected edits here when students choose to share them and approve their showcase feature.</p>
+              <Link to="/showcase" className="text-link">About the showcase <span aria-hidden="true">↗</span></Link>
+            </div>
+          )}
+        </Reveal>
+      </section>
+
+      <section id="free-course" className="container section">
+        <Reveal>
+          <div className="free-course-banner">
+            <div className="free-course-art" aria-hidden="true"><span>VOICE</span><i /><b>FREE<br />LESSONS</b></div>
+            <div className="free-course-copy">
+              <span className="eyebrow">08 / START FREE · 8 LESSONS</span>
+              <h2>Find the voice in your edit.</h2>
+              <p>Try the Own Theme teaching approach, explore how sound carries a story, and draft your first Theme Sheet—no course purchase required.</p>
+              <Link to="/free-course" className="btn btn-primary">Explore the free mini-course <span aria-hidden="true">↗</span></Link>
             </div>
           </div>
         </Reveal>
       </section>
 
-      {/* ===== Free Voice banner ===== */}
-      <section className="container">
+      <section id="pricing" className="container section pricing-section">
         <Reveal>
-          <div className="banner">
-            <h2>Start free with Voice</h2>
-            <p>An 8-lesson mini-course that shows the method and helps you draft your first Theme Sheet.</p>
-            <Link to="/signup" className="btn btn-primary">Join for free</Link>
+          <div className="section-heading">
+            <span className="eyebrow">09 / WAYS TO LEARN</span>
+            <h2 className="section-title">One course or the whole collection.</h2>
+            <p className="section-sub">Choose a focused track or get all three courses together. Membership details will appear when an ongoing plan is available.</p>
+          </div>
+          <div className="pricing-preview-grid">
+            <article className="pricing-preview-card">
+              <span className="eyebrow">INDIVIDUAL TRACKS</span>
+              <h3>Start with one format.</h3>
+              <p>Choose an individual course. Access duration and terms are listed with each course when confirmed.</p>
+              <Link to="/courses" className="text-link">Browse individual courses <span aria-hidden="true">↗</span></Link>
+            </article>
+            {completeBundleAvailable && <article className="pricing-preview-card bundle-preview">
+              <span className="eyebrow">BEST VALUE · ONE-TIME</span>
+              <h3>The complete bundle.</h3>
+              <p>All three courses, one payment.{saving > 0 ? ` Save $${saving} compared with buying them individually.` : ""}</p>
+              <div className="bundle-preview-bottom"><strong>${bundlePrice}<small> one-time</small></strong><Link to="/checkout/bundle" className="btn btn-primary">Get the bundle <span aria-hidden="true">↗</span></Link></div>
+            </article>}
+            <article className="pricing-preview-card membership-preview">
+              <span className="eyebrow">MEMBERSHIP</span>
+              <h3>Keep learning, together.</h3>
+              <p>{membershipAvailable
+                ? `Membership offer: ${plans.membershipPrice} ${plans.membershipBillingCycle}. Access: ${plans.membershipAccess}. Renewal: ${plans.membershipRenewalTerms}. Subscription checkout is not yet available.`
+                : plans.membershipStatus === "Paused"
+                  ? "Membership enrollment is paused while we shape the ongoing learning offer."
+                  : "Membership is in development. We'll share the format and price when they're confirmed."}</p>
+              <span className="coming-soon">{membershipAvailable ? "Offer preview" : plans.membershipStatus}</span>
+            </article>
+          </div>
+          <div className="course-section-link"><Link to="/plans" className="text-link">Compare all learning options <span aria-hidden="true">↗</span></Link></div>
+        </Reveal>
+      </section>
+
+      <section id="faq" className="container section home-faq-section">
+        <Reveal>
+          <div className="section-heading">
+            <span className="eyebrow">10 / FAQ</span>
+            <h2 className="section-title">Before you press play.</h2>
+            <p className="section-sub">A few useful details about learning with Own Theme.</p>
+          </div>
+          <div className="home-faq-list">
+            {faq.map((item) => (
+              <details className="acc" key={item.q}>
+                <summary>{item.q}</summary>
+                <p>{item.a}</p>
+              </details>
+            ))}
+          </div>
+          <div className="course-section-link"><Link to="/faq" className="text-link">More questions? Visit FAQ & support <span aria-hidden="true">↗</span></Link></div>
+        </Reveal>
+      </section>
+
+      <section className="container section final-home-section">
+        <Reveal>
+          <div className="final-home-cta">
+            <span className="eyebrow">11 / YOUR NEXT CUT STARTS HERE</span>
+            <h2>Make something that could only come from you.</h2>
+            <p>Start with a free lesson or choose the track that fits the stories you want to tell.</p>
+            <div className="hero-btns">
+              <Link to="/courses" className="btn btn-primary">Explore courses <span aria-hidden="true">↗</span></Link>
+              <Link to="/free-course" className="btn btn-outline">Try the free mini-course</Link>
+            </div>
           </div>
         </Reveal>
       </section>

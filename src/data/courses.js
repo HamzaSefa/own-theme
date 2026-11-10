@@ -69,6 +69,15 @@ export const courses = [
   },
 ];
 
+export function isPublicCourse(course) {
+  return (course.publicationStatus || "Published") === "Published" && course.visibility !== false;
+}
+
+const savedCatalog = localStorage.getItem("ownTheme_managed_courses");
+if (savedCatalog) {
+  courses.splice(0, courses.length, ...JSON.parse(savedCatalog));
+}
+
 // Pretend student. localStorage keeps purchases after a page refresh.
 const saved = localStorage.getItem("ownTheme_enrolled");
 
@@ -88,6 +97,13 @@ export function enroll(courseId) {
     student.enrolled.push({ courseId, completed: [] });
     localStorage.setItem("ownTheme_enrolled", JSON.stringify(student.enrolled));
   }
+}
+
+export function saveProgress(courseId, completed) {
+  const enrollment = student.enrolled.find((item) => item.courseId === courseId);
+  if (!enrollment) return;
+  enrollment.completed = completed;
+  localStorage.setItem("ownTheme_enrolled", JSON.stringify(student.enrolled));
 }
 
 // Wipes the demo so you can show the purchase again

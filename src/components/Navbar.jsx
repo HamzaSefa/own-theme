@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 
 export default function Navbar() {
   const [open, setOpen] = useState(false); // is the mobile menu open?
@@ -15,12 +15,12 @@ export default function Navbar() {
         </button>
 
         <nav className={open ? "nav-links open" : "nav-links"}>
-          <a href="/#courses" onClick={close}>Courses</a>
-          <a href="/#pricing" onClick={close}>Pricing</a>
-          <Link to="/login" onClick={close}>Login</Link>
-          <Link to="/dashboard" onClick={close}>Dashboard</Link>
-          <Link to="/admin" onClick={close}>Admin</Link>
-          <Link to="/signup" className="btn btn-primary" onClick={close}>Sign up</Link>
+          <NavLink to="/" end onClick={close}>Home</NavLink>
+          <NavLink to="/courses" onClick={close}>Courses</NavLink>
+          <NavLink to="/showcase" onClick={close}>Showcase</NavLink>
+          <NavLink to="/about" onClick={close}>About</NavLink>
+          <NavLink to="/login" onClick={close}>Log In</NavLink>
+          <Link to="/courses" className="btn btn-primary nav-cta" onClick={close}>Explore Courses</Link>
         </nav>
       </div>
     </header>

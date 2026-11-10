@@ -69,6 +69,8 @@ export const details = {
 export const faq = [
   { q: "Do I need editing experience?", a: "No. Module 0 and the first module of each course assume no prior experience." },
   { q: "Do I need to buy expensive software?", a: "No. Each course lists its minimum software, and free options such as DaVinci Resolve and CapCut are covered where possible." },
-  { q: "How much time does it take each week?", a: "Plan for about three to five hours a week." },
-  { q: "Can I get a refund?", a: "Yes. A clear refund window will be published before launch." },
+  { q: "How much time does it take each week?", a: "Plan for about three to five hours a week, depending on how much time you spend practicing the lessons." },
+  { q: "How long do I have access?", a: "Course purchases include lifetime access to the course materials. Membership access will be explained when a membership plan is available." },
+  { q: "How do I enroll?", a: "Choose an individual course or the complete bundle and follow the enrollment steps. The current checkout is a demo and does not process a real payment." },
+  { q: "Can I get a refund?", a: "Our refund policy will be published before real paid enrollment opens. The current checkout is a demo and does not take payment." },
 ];

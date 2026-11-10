@@ -1,9 +1,12 @@
 // Course prices (placeholders from your proposal)
-export const bundlePrice = 180;
+const savedPlans = localStorage.getItem("ownTheme_plans");
+const planData = savedPlans ? JSON.parse(savedPlans) : {};
+export const bundlePrice = Number(planData.bundlePrice ?? 180);
 export const prices = {
   "short-form": 50,
   "long-form": 80,
   "film-doc": 100,
+  ...Object.fromEntries(Object.entries(planData.coursePrices || {}).map(([id, price]) => [id, Number(price)])),
 };
 
 export const initialStudents = [

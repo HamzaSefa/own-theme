@@ -1,44 +1,127 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import Overview from "./admin/Overview";
-import Students from "./admin/Students";
-import Content from "./admin/Content";
+import {
+  AssignmentReview,
+  CourseManagement,
+  InstructorFeedbackTools,
+  LessonManagement,
+  MediaManagement,
+  OrdersReview,
+  PlanManagement,
+  ShowcaseModeration,
+  SiteSettings,
+  StudentManagement,
+} from "./admin/Workspace";
 
-const tabs = [
-  { id: "overview", label: "📊 Overview" },
-  { id: "students", label: "👥 Students" },
-  { id: "content", label: "🎬 Content" },
+const ADMIN_SESSION_KEY = "ownTheme_admin_preview";
+
+const sections = [
+  { id: "overview", label: "Admin overview", icon: "01" },
+  { id: "courses", label: "Course management", icon: "02" },
+  { id: "lessons", label: "Modules & lessons", icon: "03" },
+  { id: "media", label: "Video & resources", icon: "04" },
+  { id: "students", label: "Student management", icon: "05" },
+  { id: "orders", label: "Orders & payments", icon: "06" },
+  { id: "assignments", label: "Assignment review", icon: "07" },
+  { id: "feedback", label: "Instructor feedback", icon: "08" },
+  { id: "plans", label: "Bundles & plans", icon: "09" },
+  { id: "showcase", label: "Showcase moderation", icon: "10" },
+  { id: "settings", label: "Site content & settings", icon: "11" },
 ];
 
 export default function Admin() {
-  const [tab, setTab] = useState("overview");
+  const [unlocked, setUnlocked] = useState(localStorage.getItem(ADMIN_SESSION_KEY) === "true");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const courseId = location.pathname.split("/").filter(Boolean)[2];
+  const legacyTab = location.pathname.slice("/admin/".length).split("/")[0];
+  const routeTab = location.pathname === "/admin/courses"
+    ? "courses"
+    : location.pathname.startsWith("/admin/courses/")
+      ? "lessons"
+      : location.pathname === "/admin"
+        ? "overview"
+        : sections.some((section) => section.id === legacyTab)
+          ? legacyTab
+            : "overview";
+
+  function enterDemo() {
+    localStorage.setItem(ADMIN_SESSION_KEY, "true");
+    setUnlocked(true);
+  }
+
+  function leaveDemo() {
+    localStorage.removeItem(ADMIN_SESSION_KEY);
+    setUnlocked(false);
+  }
+
+  if (!unlocked) {
+    return (
+      <main className="admin-gate-wrap">
+        <section className="admin-gate">
+          <Link to="/" className="logo">Own<span>Theme</span></Link>
+          <span className="admin-badge">ADMIN PREVIEW</span>
+          <h1>Instructor workspace</h1>
+          <p>
+            This local demo includes management screens, but does not have
+            production authentication or server-side permissions.
+          </p>
+          <p className="admin-security-warning">
+            Demo only: this preview can be opened by anyone and browser data can be edited. Do not enter real student, payment, or private course data. Protect every admin route and action with server-side authentication and authorization before launch.
+          </p>
+          <button className="btn btn-primary" onClick={enterDemo}>Enter admin preview</button>
+          <Link to="/" className="admin-back-link">← Back to public site</Link>
+        </section>
+      </main>
+    );
+  }
 
   return (
-    <>
-      <div className="admin-top">
+    <div className="admin-workspace">
+      <header className="admin-top">
         <Link to="/">← Back to site</Link>
-        <span className="admin-badge">ADMIN</span>
-      </div>
-
+        <span className="admin-badge">ADMIN PREVIEW</span>
+        <button className="btn btn-outline btn-sm" onClick={leaveDemo}>Exit preview</button>
+      </header>
       <div className="admin-layout">
-        <nav className="admin-side">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              className={tab === t.id ? "side-btn active" : "side-btn"}
-              onClick={() => setTab(t.id)}
-            >
-              {t.label}
-            </button>
-          ))}
+        <nav className="admin-side" aria-label="Admin tools">
+          {sections.map((section) => {
+            const active = routeTab === section.id;
+            const destination = section.id === "overview"
+              ? "/admin"
+              : section.id === "courses"
+                ? "/admin/courses"
+                : section.id === "lessons"
+                  ? `/admin/courses/${courseId || "short-form"}`
+                  : `/admin/${section.id}`;
+            return (
+              <button
+                key={section.id}
+                className={active ? "side-btn active" : "side-btn"}
+                onClick={() => navigate(destination)}
+                aria-current={active ? "page" : undefined}
+              >
+                <span>{section.icon}</span>{section.label}
+              </button>
+            );
+          })}
         </nav>
-
         <main className="admin-main">
-          {tab === "overview" && <Overview />}
-          {tab === "students" && <Students />}
-          {tab === "content" && <Content />}
+          {routeTab === "overview" && <Overview />}
+          {routeTab === "courses" && <CourseManagement />}
+          {routeTab === "lessons" && <LessonManagement courseId={courseId} />}
+          {routeTab === "media" && <MediaManagement />}
+          {routeTab === "students" && <StudentManagement />}
+          {routeTab === "orders" && <OrdersReview />}
+          {routeTab === "assignments" && <AssignmentReview />}
+          {routeTab === "feedback" && <InstructorFeedbackTools />}
+          {routeTab === "plans" && <PlanManagement />}
+          {routeTab === "showcase" && <ShowcaseModeration />}
+          {routeTab === "settings" && <SiteSettings />}
         </main>
       </div>
-    </>
+      <p className="admin-preview-note">Unsecured demo preview · Browser-only controls are not admin authorization. Server-side access checks are required for every protected action.</p>
+    </div>
   );
 }
