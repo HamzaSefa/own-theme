@@ -1,18 +1,17 @@
-import { useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
-import { courses, isPublicCourse, student } from "../data/courses";
+import { courses, getPublicCourseData, isPublicCourse, getCurrentEnrollments } from "../data/courses";
 import { details, faq } from "../data/details";
 import { prices } from "../data/admin";
 
 export default function CourseDetail() {
-  const [previewError, setPreviewError] = useState(false);
   const { courseId } = useParams();
-  const course = courses.find((item) => item.id === courseId || (item.slug || item.id) === courseId);
+  const storedCourse = courses.find((item) => item.id === courseId || (item.slug || item.id) === courseId);
+  const course = storedCourse && getPublicCourseData(storedCourse);
   const info = course ? details[course.id] : null;
 
   if (!course || !isPublicCourse(course)) return <Navigate to="/courses" replace />;
 
-  const owned = student.enrolled.some((enrollment) => enrollment.courseId === course.id);
+  const owned = getCurrentEnrollments().some((enrollment) => enrollment.courseId === course.id);
   const modules = course.modules.map((module) => {
     const moduleInfo = info?.modules?.find((item) => item.title === module.title);
     return {
@@ -111,12 +110,8 @@ export default function CourseDetail() {
             <h2>A first look inside</h2>
             {exampleLesson ? (
               <article className="example-lesson-card">
-                {exampleLesson.preview === true && /^https?:\/\//i.test(exampleLesson.videoUrl || "") && !previewError ? (
-                  <video className="course-public-preview" controls preload="metadata" src={exampleLesson.videoUrl} onError={() => setPreviewError(true)}>
-                    Your browser does not support video playback.
-                  </video>
-                ) : <span className="example-lesson-play" aria-hidden="true">▶</span>}
-                <div><strong>{exampleLesson.title}</strong><span>{exampleLesson.preview === true && exampleLesson.videoUrl ? previewError ? "Preview video is unavailable. Please try again later." : "Public lesson preview" : "Preview video coming soon"}{exampleLesson.duration ? ` · ${exampleLesson.duration}` : ""}</span></div>
+                <span className="example-lesson-play" aria-hidden="true">▶</span>
+                <div><strong>{exampleLesson.title}</strong><span>{exampleLesson.preview === true ? "Public preview lesson · video playback is provided by the secure lesson service when available." : "Preview video coming soon"}{exampleLesson.duration ? ` · ${exampleLesson.duration}` : ""}</span></div>
               </article>
             ) : <p className="muted">A sample lesson will be added when a preview is available.</p>}
           </section>

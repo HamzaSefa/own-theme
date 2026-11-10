@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { adminStorageKeys, readAdminData } from "../data/adminWorkspace";
+import { getCurrentUser } from "../data/studentPortal";
 
 const linkGroups = [
   {
@@ -12,11 +14,7 @@ const linkGroups = [
   },
   {
     title: "Learn",
-    links: [
-      { label: "Free mini-course", to: "/free-course" },
-      { label: "Student dashboard", to: "/app" },
-      { label: "Sign in", to: "/login" },
-    ],
+    links: [],
   },
   {
     title: "Support",
@@ -27,13 +25,7 @@ const linkGroups = [
   },
   {
     title: "Connect",
-    links: [
-      { label: "Instagram · coming soon" },
-      { label: "YouTube · coming soon" },
-      { label: "Privacy policy · pending review", to: "/privacy" },
-      { label: "Terms · pending review", to: "/terms" },
-      { label: "Refund policy · pending review", to: "/refund-policy" },
-    ],
+    links: [],
   },
 ];
 
@@ -54,13 +46,26 @@ function FooterLink({ href, to, children }) {
 }
 
 export default function Footer() {
+  const user = getCurrentUser();
+  const settings = readAdminData(adminStorageKeys.settings, {});
+  const socialLinks = [
+    { label: "Instagram", href: settings.socialLinks?.instagram },
+    { label: "YouTube", href: settings.socialLinks?.youtube },
+  ].filter((item) => /^https?:\/\//i.test(item.href || ""));
+  const legalLinks = [
+    { label: settings.legalContent?.privacy?.trim() ? "Privacy policy" : "Privacy policy · pending review", to: "/privacy" },
+    { label: settings.legalContent?.terms?.trim() ? "Terms" : "Terms · pending review", to: "/terms" },
+    { label: settings.legalContent?.refund?.trim() ? "Refund policy" : "Refund policy · pending review", to: "/refund-policy" },
+  ];
+  const logoUrl = /^https?:\/\//i.test(settings.brandLogoUrl || "") ? settings.brandLogoUrl : "";
+
   return (
     <footer className="footer">
       <div className="container">
         <div className="footer-main">
           <div className="footer-brand">
             <Link to="/" className="logo">
-              Own<span>Theme</span>
+              {logoUrl ? <img className="brand-logo-image" src={logoUrl} alt="Own Theme" /> : <>Own<span>Theme</span></>}
             </Link>
             <p>
               Learn the craft. Find your point of view. Make work that feels
@@ -79,7 +84,18 @@ export default function Footer() {
             >
               <h2>{group.title}</h2>
               <ul>
-                {group.links.map((link) => (
+                {(group.title === "Connect"
+                  ? [...socialLinks, ...legalLinks]
+                  : group.title === "Learn"
+                    ? [
+                        { label: "Free mini-course", to: "/free-course" },
+                        {
+                          label: user?.role === "admin" ? "Admin workspace" : "Learning space",
+                          to: user?.role === "admin" ? "/admin" : user ? "/app" : "/login",
+                        },
+                        ...(!user ? [{ label: "Create an account", to: "/register" }] : []),
+                      ]
+                    : group.links).map((link) => (
                   <li key={link.label}>
                     <FooterLink href={link.href} to={link.to}>
                       {link.label}

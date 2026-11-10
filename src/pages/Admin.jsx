@@ -13,6 +13,7 @@ import {
   SiteSettings,
   StudentManagement,
 } from "./admin/Workspace";
+import { getCurrentUser } from "../data/studentPortal";
 
 const ADMIN_SESSION_KEY = "ownTheme_admin_preview";
 
@@ -32,6 +33,7 @@ const sections = [
 
 export default function Admin() {
   const [unlocked, setUnlocked] = useState(localStorage.getItem(ADMIN_SESSION_KEY) === "true");
+  const user = getCurrentUser();
   const location = useLocation();
   const navigate = useNavigate();
   const courseId = location.pathname.split("/").filter(Boolean)[2];
@@ -46,17 +48,12 @@ export default function Admin() {
           ? legacyTab
             : "overview";
 
-  function enterDemo() {
-    localStorage.setItem(ADMIN_SESSION_KEY, "true");
-    setUnlocked(true);
-  }
-
   function leaveDemo() {
     localStorage.removeItem(ADMIN_SESSION_KEY);
     setUnlocked(false);
   }
 
-  if (!unlocked) {
+  if (!unlocked || user?.role !== "admin") {
     return (
       <main className="admin-gate-wrap">
         <section className="admin-gate">
@@ -64,13 +61,13 @@ export default function Admin() {
           <span className="admin-badge">ADMIN PREVIEW</span>
           <h1>Instructor workspace</h1>
           <p>
-            This local demo includes management screens, but does not have
-            production authentication or server-side permissions.
+            This local demo includes management screens. Use the admin demo
+            sign-in from the login page to view this preview.
           </p>
           <p className="admin-security-warning">
             Demo only: this preview can be opened by anyone and browser data can be edited. Do not enter real student, payment, or private course data. Protect every admin route and action with server-side authentication and authorization before launch.
           </p>
-          <button className="btn btn-primary" onClick={enterDemo}>Enter admin preview</button>
+          <Link to="/login" className="btn btn-primary">Go to admin demo sign-in</Link>
           <Link to="/" className="admin-back-link">← Back to public site</Link>
         </section>
       </main>
@@ -114,7 +111,7 @@ export default function Admin() {
           {routeTab === "media" && <MediaManagement />}
           {routeTab === "students" && <StudentManagement />}
           {routeTab === "orders" && <OrdersReview />}
-          {routeTab === "assignments" && <AssignmentReview />}
+          {routeTab === "assignments" && <AssignmentReview submissionId={location.pathname.startsWith("/admin/assignments/") ? location.pathname.slice("/admin/assignments/".length) : ""} />}
           {routeTab === "feedback" && <InstructorFeedbackTools />}
           {routeTab === "plans" && <PlanManagement />}
           {routeTab === "showcase" && <ShowcaseModeration />}

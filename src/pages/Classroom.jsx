@@ -1,9 +1,8 @@
 import { useRef, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
-import { courses, student, getAllLessons, getProgress, saveProgress } from "../data/courses";
-import { readStudentData } from "../data/studentPortal";
+import { courses, getCurrentEnrollments, getAllLessons, getProgress, saveProgress } from "../data/courses";
+import { getCurrentUser, getUserSubmissions, readStudentData } from "../data/studentPortal";
 
-const ASSIGNMENTS_KEY = "ownTheme_assignments";
 const VIDEO_PROGRESS_KEY = "ownTheme_video_progress";
 
 function findLesson(courseId, lessonId) {
@@ -35,7 +34,8 @@ function getModuleAssignments(module) {
 }
 
 function readVideoPositions() {
-  return readStudentData(VIDEO_PROGRESS_KEY, {});
+  const email = getCurrentUser()?.email?.trim().toLowerCase() || "anonymous";
+  return readStudentData(`${VIDEO_PROGRESS_KEY}:${encodeURIComponent(email)}`, {});
 }
 
 export default function Classroom() {
@@ -43,7 +43,7 @@ export default function Classroom() {
   const resolved = findLesson(routeCourseId, lessonId);
   const course = resolved?.course;
   const lesson = resolved?.lesson;
-  const enrollment = course && student.enrolled.find((item) => item.courseId === course.id);
+  const enrollment = course && getCurrentEnrollments().find((item) => item.courseId === course.id);
 
   if (!course || !enrollment || !lesson || !resolved) return <Navigate to="/app" replace />;
   if (lesson.locked === true) return <Navigate to={`/app/courses/${course.id}`} replace />;
@@ -52,7 +52,7 @@ export default function Classroom() {
 }
 
 function LessonPlayer({ resolved, enrollment }) {
-  const { course, lesson, lessons, index } = resolved;
+  const { course, lesson, lessons } = resolved;
   const videoRef = useRef(null);
   const lastSavedPosition = useRef(0);
   const [completed, setCompleted] = useState(() => (enrollment.completed || []).filter((id) =>
@@ -63,8 +63,10 @@ function LessonPlayer({ resolved, enrollment }) {
   const [resumeNotice, setResumeNotice] = useState("");
   const [playbackRate, setPlaybackRate] = useState(1);
 
-  const previous = lessons[index - 1];
-  const next = lessons[index + 1];
+  const availableLessons = lessons.filter((item) => item.locked !== true);
+  const availableIndex = availableLessons.findIndex((item) => item.id === lesson.id);
+  const previous = availableLessons[availableIndex - 1];
+  const next = availableLessons[availableIndex + 1];
   const isComplete = completed.includes(lesson.id);
   const progress = getProgress(course, completed);
   const module = getLessonModule(course, lesson.id);
@@ -78,7 +80,7 @@ function LessonPlayer({ resolved, enrollment }) {
       title: data.title || "Module assignment",
     };
   });
-  const submissions = readStudentData(ASSIGNMENTS_KEY, []);
+  const submissions = getUserSubmissions();
   const lessonSubmissions = submissions.filter((submission) =>
     submission.courseId === course.id
     && (
@@ -97,7 +99,8 @@ function LessonPlayer({ resolved, enrollment }) {
     if (!force && Math.abs(position - lastSavedPosition.current) < 5 && !video.ended) return;
     const positions = readVideoPositions();
     positions[lesson.id] = position;
-    localStorage.setItem(VIDEO_PROGRESS_KEY, JSON.stringify(positions));
+    const email = getCurrentUser()?.email?.trim().toLowerCase() || "anonymous";
+    localStorage.setItem(`${VIDEO_PROGRESS_KEY}:${encodeURIComponent(email)}`, JSON.stringify(positions));
     lastSavedPosition.current = position;
     setSavedPosition(position);
   }

@@ -1,3 +1,5 @@
+import { getUserEnrollments, saveUserEnrollments } from "./studentPortal";
+
 export const courses = [
   {
     id: "short-form",
@@ -73,6 +75,23 @@ export function isPublicCourse(course) {
   return (course.publicationStatus || "Published") === "Published" && course.visibility !== false;
 }
 
+export function getPublicCourseData(course) {
+  return {
+    ...course,
+    modules: (course.modules || []).map((module) => ({
+      ...module,
+      lessons: (module.lessons || []).map((lesson) => {
+        const publicLesson = { ...lesson };
+        delete publicLesson.videoUrl;
+        delete publicLesson.resourceUrl;
+        delete publicLesson.videoAssetId;
+        delete publicLesson.resourceAssetId;
+        return publicLesson;
+      }),
+    })),
+  };
+}
+
 const savedCatalog = localStorage.getItem("ownTheme_managed_courses");
 if (savedCatalog) {
   courses.splice(0, courses.length, ...JSON.parse(savedCatalog));
@@ -93,17 +112,21 @@ export const student = {
 
 // Called after a (fake) payment succeeds
 export function enroll(courseId) {
-  if (!student.enrolled.some((e) => e.courseId === courseId)) {
-    student.enrolled.push({ courseId, completed: [] });
-    localStorage.setItem("ownTheme_enrolled", JSON.stringify(student.enrolled));
-  }
+  const enrollments = getUserEnrollments(student.enrolled);
+  if (enrollments.some((enrollment) => enrollment.courseId === courseId)) return;
+  saveUserEnrollments([...enrollments, { courseId, completed: [] }]);
 }
 
 export function saveProgress(courseId, completed) {
-  const enrollment = student.enrolled.find((item) => item.courseId === courseId);
+  const enrollments = getUserEnrollments(student.enrolled);
+  const enrollment = enrollments.find((item) => item.courseId === courseId);
   if (!enrollment) return;
   enrollment.completed = completed;
-  localStorage.setItem("ownTheme_enrolled", JSON.stringify(student.enrolled));
+  saveUserEnrollments(enrollments);
+}
+
+export function getCurrentEnrollments() {
+  return getUserEnrollments(student.enrolled);
 }
 
 // Wipes the demo so you can show the purchase again

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { student } from "../data/courses";
-import { enrollInFreeCourse, setCurrentUser } from "../data/studentPortal";
+import { enrollInFreeCourse, getInternalReturnPath, setCurrentUser } from "../data/studentPortal";
 
 const ADMIN_PREVIEW_KEY = "ownTheme_admin_preview";
 const demoAccounts = {
@@ -31,8 +30,13 @@ export default function Login() {
 
   function handleSubmit(e) {
     e.preventDefault();
-    const user = { name: student.name, email: email.trim() };
-    const destination = location.state?.from || "/app";
+    const normalizedEmail = email.trim();
+    const isDemoStudent = normalizedEmail.toLowerCase() === demoAccounts.student.email;
+    const name = isDemoStudent
+      ? demoAccounts.student.name
+      : normalizedEmail.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+    const user = { name, email: normalizedEmail, role: "student" };
+    const destination = getInternalReturnPath(location.state?.from);
     finishLogin(user, destination);
   }
 
@@ -53,20 +57,23 @@ export default function Login() {
     <div className="auth-wrap">
       <form className="auth-card" onSubmit={handleSubmit}>
         <h1>Welcome back</h1>
-        <p className="sub">Log in to continue your course. Demo sign-in accepts any email and password.</p>
+        <p className="sub">This preview does not verify passwords. Use the demo student shortcut, or enter an email to create a temporary student session on this device.</p>
+        {location.state?.from && (
+          <p className="auth-preview-notice">Continue to the page you requested after signing in.</p>
+        )}
 
         <div className="field">
-          <label>Email</label>
+          <label htmlFor="login-email">Email</label>
           <input type="email" required value={email}
-            onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" />
+            id="login-email" onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" />
         </div>
         <div className="field">
-          <label>Password</label>
-          <input type="password" required value={password}
-            onChange={(e) => setPassword(e.target.value)} placeholder="Your password" />
+          <label htmlFor="login-password">Password (demo only)</label>
+          <input type="password" value={password}
+            id="login-password" onChange={(e) => setPassword(e.target.value)} placeholder="Optional in this preview" />
         </div>
 
-        <button type="submit" className="btn btn-primary btn-block">Log in</button>
+        <button type="submit" className="btn btn-primary btn-block">Continue to learning space</button>
         <div className="demo-login-options" aria-label="Quick demo sign-in">
           <span className="demo-login-label">QUICK DEMO ACCESS</span>
           <button type="button" className="btn btn-outline btn-block" onClick={fillStudentCredentials}>
@@ -75,7 +82,7 @@ export default function Login() {
           <button type="button" className="btn btn-outline btn-block" onClick={signInAsDemoAdmin}>
             Sign in to admin preview
           </button>
-          <p>These shortcuts use local demo profiles; passwords are not verified. Do not use real or sensitive data.</p>
+          <p>Demo shortcuts do not verify passwords. Profiles and learning data stay in this browser; do not use sensitive information.</p>
         </div>
         <p className="auth-switch"><Link to="/forgot-password">Forgot your password?</Link></p>
         <p className="auth-switch">No account? <Link to="/signup" state={location.state}>Sign up</Link></p>

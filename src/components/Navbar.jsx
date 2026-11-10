@@ -1,14 +1,18 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
+import { adminStorageKeys, readAdminData } from "../data/adminWorkspace";
+import { getCurrentUser } from "../data/studentPortal";
 
 export default function Navbar() {
   const [open, setOpen] = useState(false); // is the mobile menu open?
+  const logoUrl = readAdminData(adminStorageKeys.settings, {}).brandLogoUrl;
+  const user = getCurrentUser();
   const close = () => setOpen(false);
 
   return (
     <header className="navbar">
       <div className="container nav-inner">
-        <Link to="/" className="logo" onClick={close}>Own<span>Theme</span></Link>
+        <Link to="/" className="logo" onClick={close}>{/^https?:\/\//i.test(logoUrl || "") ? <img className="brand-logo-image" src={logoUrl} alt="Own Theme" /> : <>Own<span>Theme</span></>}</Link>
 
         <button className="menu-btn" aria-label="Toggle menu" onClick={() => setOpen(!open)}>
           {open ? "✕" : "☰"}
@@ -19,8 +23,14 @@ export default function Navbar() {
           <NavLink to="/courses" onClick={close}>Courses</NavLink>
           <NavLink to="/showcase" onClick={close}>Showcase</NavLink>
           <NavLink to="/about" onClick={close}>About</NavLink>
-          <NavLink to="/login" onClick={close}>Log In</NavLink>
-          <Link to="/courses" className="btn btn-primary nav-cta" onClick={close}>Explore Courses</Link>
+          {user
+            ? <Link to={user.role === "admin" ? "/admin" : "/app"} className="nav-account-link" onClick={close}>
+                {user.role === "admin" ? "Admin workspace" : "Learning space"}
+              </Link>
+            : <NavLink to="/login" onClick={close}>Log In</NavLink>}
+          <Link to={user ? (user.role === "admin" ? "/admin" : "/app") : "/courses"} className="btn btn-primary nav-cta" onClick={close}>
+            {user ? "Continue learning" : "Explore Courses"}
+          </Link>
         </nav>
       </div>
     </header>

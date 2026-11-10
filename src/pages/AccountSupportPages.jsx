@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { adminStorageKeys, readAdminData } from "../data/adminWorkspace";
 
 export function ForgotPasswordPage() {
   const [submitted, setSubmitted] = useState(false);
@@ -95,8 +96,13 @@ const legalContent = {
 };
 
 export function LegalInfoPage({ document }) {
-  const content = legalContent[document];
-  if (!content) return null;
+  const defaultContent = legalContent[document];
+  if (!defaultContent) return null;
+  const siteSettings = readAdminData(adminStorageKeys.settings, {});
+  const configuredText = siteSettings.legalContent?.[document]?.trim();
+  const content = configuredText
+    ? { ...defaultContent, description: "The current Own Theme policy is provided below." }
+    : defaultContent;
 
   return (
     <main className="container public-page account-support-page">
@@ -106,9 +112,15 @@ export function LegalInfoPage({ document }) {
         <p>{content.description}</p>
       </header>
       <section className="account-unavailable-panel">
-        <h2>Publication pending</h2>
-        <p>{content.note}</p>
-        <p>This page is not legal advice and does not create contractual terms.</p>
+        {configuredText ? (
+          <div className="legal-document-copy"><h2>Information</h2>{configuredText.split(/\n{2,}/).map((paragraph, index) => <p key={`legal-${index}`}>{paragraph}</p>)}</div>
+        ) : (
+          <>
+            <h2>Publication pending</h2>
+            <p>{content.note}</p>
+          </>
+        )}
+        <p>Legal copy should be reviewed and approved for your business before publication.</p>
         <Link to="/support" className="btn btn-outline">FAQ & support</Link>
       </section>
     </main>

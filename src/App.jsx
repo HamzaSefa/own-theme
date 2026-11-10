@@ -1,4 +1,5 @@
 import { Routes, Route, useLocation } from "react-router-dom";
+import { useEffect } from "react";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import Home from "./pages/Home";
@@ -42,6 +43,9 @@ import {
 
 function App() {
   const location = useLocation();
+  useEffect(() => {
+    if (!location.hash) window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [location.pathname, location.hash]);
   const inStudentPlatform = [
     "/app",
     "/dashboard",

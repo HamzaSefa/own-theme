@@ -1,17 +1,25 @@
 import { useState } from "react";
-import { courses, student } from "../../data/courses";
+import { courses, getProgress, student } from "../../data/courses";
 import { prices } from "../../data/admin";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { EmptyState, SuccessMessage, ValidationError } from "../../components/States";
+import {
+  getUserEnrollments,
+  getUserStorageKey,
+  saveUserEnrollments,
+} from "../../data/studentPortal";
 import {
   adminStorageKeys,
   getAdminOrders,
+  getAdminPlans,
   getAdminStudents,
+  logAdminAction,
   readAdminData,
   writeAdminData,
 } from "../../data/adminWorkspace";
 
 function SavedNotice({ children }) {
-  return <p className="admin-saved" role="status">{children}</p>;
+  return <SuccessMessage>{children}</SuccessMessage>;
 }
 
 function addStudentNotification(recipientEmail, notification) {
@@ -26,7 +34,7 @@ function addStudentNotification(recipientEmail, notification) {
     subscription_status: "billing",
   };
   const preference = preferenceByType[notification.type];
-  const preferences = readAdminData("ownTheme_notification_preferences", {});
+  const preferences = readAdminData(getUserStorageKey("ownTheme_notification_preferences", recipientEmail), {});
   if (preference && preferences[preference] === false) return;
   const notifications = readAdminData("ownTheme_notifications", []);
   writeAdminData("ownTheme_notifications", [
@@ -42,6 +50,10 @@ function addStudentNotification(recipientEmail, notification) {
 }
 
 export function CourseManagement() {
+  const savedCategories = readAdminData(adminStorageKeys.settings, {}).categories;
+  const courseCategories = Array.isArray(savedCategories) && savedCategories.length
+    ? [...new Set([...savedCategories, "Other"])]
+    : ["Short-Form & Social Media", "Long-Form & YouTube", "Film & Documentary", "Other"];
   const [catalog, setCatalog] = useState(() => courses.map((course) => ({
     ...course,
     slug: course.slug || course.id,
@@ -86,7 +98,7 @@ export function CourseManagement() {
       fullDescription: "",
       thumbnail: "",
       heroImage: "",
-      category: "Short-Form & Social Media",
+      category: courseCategories[0],
       level: "",
       estimatedDuration: "",
       outcomes: [],
@@ -175,7 +187,7 @@ export function CourseManagement() {
             <label>Full description<textarea rows="3" value={course.fullDescription} onChange={(event) => updateCourse("fullDescription", event.target.value)} /></label>
             <label>Thumbnail image URL<input type="url" value={course.thumbnail} onChange={(event) => updateCourse("thumbnail", event.target.value)} /></label>
             <label>Hero image URL<input type="url" value={course.heroImage} onChange={(event) => updateCourse("heroImage", event.target.value)} /></label>
-            <label>Category<select value={course.category} onChange={(event) => updateCourse("category", event.target.value)}><option>Short-Form & Social Media</option><option>Long-Form & YouTube</option><option>Film & Documentary</option><option>Other</option></select></label>
+            <label>Category<select value={course.category} onChange={(event) => updateCourse("category", event.target.value)}>{!courseCategories.includes(course.category) && <option>{course.category}</option>}{courseCategories.map((category) => <option key={category}>{category}</option>)}</select></label>
             <label>Skill level<input value={course.level} onChange={(event) => updateCourse("level", event.target.value)} placeholder="Set by course owner" /></label>
             <label>Estimated duration<input value={course.estimatedDuration || ""} onChange={(event) => updateCourse("estimatedDuration", event.target.value)} placeholder="Optional, if confirmed" /></label>
             <label>Instructor information<input value={course.instructor} onChange={(event) => updateCourse("instructor", event.target.value)} placeholder="Name and approved instructor description" /></label>
@@ -187,7 +199,7 @@ export function CourseManagement() {
             <label className="admin-field-wide">Learning outcomes<textarea rows="5" value={outcomesText} onChange={(event) => setOutcomesText(event.target.value)} placeholder="One learning outcome per line" /></label>
             <label className="admin-field-wide">Included resources<textarea rows="4" value={resourcesText} onChange={(event) => setResourcesText(event.target.value)} placeholder="Resource title or URL, one per line" /></label>
           </div>
-          <div className="admin-save-row"><button className="btn btn-primary" type="submit">{editingId ? "Save course" : "Create course"}</button>{saved && <SavedNotice>Course saved in this browser preview.</SavedNotice>}{validationError && <p className="admin-form-error" role="alert">{validationError}</p>}</div>
+          <div className="admin-save-row"><button className="btn btn-primary" type="submit">{editingId ? "Save course" : "Create course"}</button>{saved && <SavedNotice>Course saved in this browser preview.</SavedNotice>}<ValidationError>{validationError}</ValidationError></div>
           <p className="admin-disclaimer">Draft and archived courses will not appear in the public catalog. Publishing updates this local demo only and does not create backend permissions or billing behavior.</p>
         </form>
       )}
@@ -285,10 +297,15 @@ export function LessonManagement({ courseId: routeCourseId }) {
           curriculumStatus: status,
           modules: item.modules.map((module) => ({
             ...module,
-            lessons: module.lessons.map((lesson) => ({
-              ...lesson,
-              accessStatus: lesson.preview === true ? "Preview" : "Enrollment-only",
-            })),
+            lessons: module.lessons.map((lesson) => {
+              const savedLesson = { ...lesson };
+              delete savedLesson.videoUrl;
+              delete savedLesson.resourceUrl;
+              return {
+                ...savedLesson,
+                accessStatus: savedLesson.preview === true ? "Preview" : "Enrollment-only",
+              };
+            }),
           })),
         }
       : item);
@@ -332,8 +349,8 @@ export function LessonManagement({ courseId: routeCourseId }) {
                 </div>
               </div>
               <div className="admin-fields-two">
-                <label>Hosted video URL<input type="url" value={lesson.videoUrl || ""} onChange={(e) => updateLesson(moduleIndex, lessonIndex, "videoUrl", e.target.value)} placeholder="https://video-host/lesson" /></label>
-                <label>Resource URL<input type="url" value={lesson.resourceUrl || ""} onChange={(e) => updateLesson(moduleIndex, lessonIndex, "resourceUrl", e.target.value)} placeholder="https://files/worksheet.pdf" /></label>
+                <label>Hosted video asset ID<input value={lesson.videoAssetId || ""} onChange={(e) => updateLesson(moduleIndex, lessonIndex, "videoAssetId", e.target.value)} placeholder="Provider asset ID (no private URL)" /></label>
+                <label>Resource asset ID<input value={lesson.resourceAssetId || ""} onChange={(e) => updateLesson(moduleIndex, lessonIndex, "resourceAssetId", e.target.value)} placeholder="Secure file asset ID" /></label>
                 <label>Lesson description<textarea rows="3" value={lesson.description || ""} onChange={(e) => updateLesson(moduleIndex, lessonIndex, "description", e.target.value)} /></label>
                 <label>Lesson notes<textarea rows="3" value={lesson.notes || ""} onChange={(e) => updateLesson(moduleIndex, lessonIndex, "notes", e.target.value)} /></label>
                 <label>Resource title<input value={lesson.resourceTitle || ""} onChange={(e) => updateLesson(moduleIndex, lessonIndex, "resourceTitle", e.target.value)} placeholder="Optional display name" /></label>
@@ -358,57 +375,137 @@ export function MediaManagement() {
   const [moduleIndex, setModuleIndex] = useState("0");
   const [lessonId, setLessonId] = useState("");
   const [saved, setSaved] = useState(false);
+  const [mediaRecords, setMediaRecords] = useState(() => readAdminData(adminStorageKeys.media, {}));
   const course = catalog.find((item) => item.id === courseId);
   const module = course?.modules[Number(moduleIndex)];
   const lesson = module?.lessons.find((item) => item.id === lessonId) || module?.lessons[0];
+  const media = (lesson && mediaRecords[lesson.id]) || {};
 
   function save() {
-    writeAdminData(adminStorageKeys.courses, catalog);
-    courses.splice(0, courses.length, ...catalog);
+    const updated = structuredClone(catalog);
+    const selectedLesson = updated.find((item) => item.id === courseId)
+      ?.modules[Number(moduleIndex)]?.lessons.find((item) => item.id === lesson?.id);
+    if (selectedLesson) {
+      delete selectedLesson.videoUrl;
+      delete selectedLesson.resourceUrl;
+      Object.assign(selectedLesson, {
+        videoAssetId: media.videoAssetId || "",
+        resourceAssetId: media.resourceAssetId || "",
+        resourceTitle: media.resourceTitle || "",
+      });
+    }
+    setCatalog(updated);
+    courses.splice(0, courses.length, ...updated);
+    writeAdminData(adminStorageKeys.courses, updated);
+    writeAdminData(adminStorageKeys.media, mediaRecords);
     setSaved(true);
+    window.dispatchEvent(new Event("ownTheme:catalog-updated"));
   }
 
-  function updateLesson(key, value) {
-    const updated = structuredClone(catalog);
-    const selectedCourse = updated.find((item) => item.id === courseId);
-    const selectedModule = selectedCourse?.modules[Number(moduleIndex)];
-    const selectedLesson = selectedModule?.lessons.find((item) => item.id === lessonId) || selectedModule?.lessons[0];
-    if (!selectedLesson) return;
-    selectedLesson[key] = value;
-    setCatalog(updated);
+  function updateMedia(key, value) {
+    if (!lesson) return;
+    setMediaRecords((current) => ({
+      ...current,
+      [lesson.id]: { ...(current[lesson.id] || {}), [key]: value },
+    }));
+    if (key === "videoAccess") {
+      const updated = structuredClone(catalog);
+      const selectedLesson = updated.find((item) => item.id === courseId)
+        ?.modules[Number(moduleIndex)]?.lessons.find((item) => item.id === lesson.id);
+      if (selectedLesson) {
+        selectedLesson.preview = value === "Public preview";
+        selectedLesson.accessStatus = selectedLesson.preview ? "Preview" : "Enrollment-only";
+        setCatalog(updated);
+      }
+    }
     setSaved(false);
   }
 
+  function removeMedia() {
+    if (!lesson || !window.confirm("Remove video and resource references and metadata for this lesson?")) return;
+    const updatedMedia = { ...mediaRecords };
+    delete updatedMedia[lesson.id];
+    const updated = structuredClone(catalog);
+    const selectedLesson = updated.find((item) => item.id === courseId)
+      ?.modules[Number(moduleIndex)]?.lessons.find((item) => item.id === lesson.id);
+    if (selectedLesson) {
+      delete selectedLesson.videoUrl;
+      delete selectedLesson.resourceUrl;
+      delete selectedLesson.videoAssetId;
+      delete selectedLesson.resourceAssetId;
+      selectedLesson.preview = false;
+      selectedLesson.accessStatus = "Enrollment-only";
+    }
+    setMediaRecords(updatedMedia);
+    setCatalog(updated);
+    courses.splice(0, courses.length, ...updated);
+    writeAdminData(adminStorageKeys.courses, updated);
+    writeAdminData(adminStorageKeys.media, updatedMedia);
+    setSaved(true);
+    window.dispatchEvent(new Event("ownTheme:catalog-updated"));
+  }
+
   return (
-    <>
+    <div className="admin-media-management">
       <h1>Video & resource management</h1>
-      <p className="muted admin-description">Attach a hosted video URL and lesson resource to the curriculum.</p>
+      <p className="muted admin-description">Manage lesson media metadata and provider asset references without placing private playback URLs or provider secrets in public course data.</p>
       <section className="admin-edit-card admin-plan-form">
         <label>Course<select value={courseId} onChange={(e) => { setCourseId(e.target.value); setModuleIndex("0"); setLessonId(""); setSaved(false); }}>{catalog.map((item) => <option value={item.id} key={item.id}>{item.title}</option>)}</select></label>
-        <label>Module<select value={moduleIndex} onChange={(e) => { setModuleIndex(e.target.value); setLessonId(""); setSaved(false); }}>{course?.modules.map((item, index) => <option value={index} key={`${item.title}-${index}`}>{item.title}</option>)}</select></label>
-        <label>Lesson<select value={lesson?.id || ""} onChange={(e) => { setLessonId(e.target.value); setSaved(false); }}>{module?.lessons.map((item) => <option value={item.id} key={item.id}>{item.title}</option>)}</select></label>
+        <label>Module<select value={course?.modules[Number(moduleIndex)] ? moduleIndex : ""} onChange={(e) => { setModuleIndex(e.target.value); setLessonId(""); setSaved(false); }}><option value="" disabled>Select a module</option>{course?.modules.map((item, index) => <option value={index} key={`${item.title}-${index}`}>{item.title}</option>)}</select></label>
+        <label>Lesson<select value={lesson?.id || ""} onChange={(e) => { setLessonId(e.target.value); setSaved(false); }}><option value="">Select a lesson</option>{module?.lessons.map((item) => <option value={item.id} key={item.id}>{item.title}</option>)}</select></label>
         {lesson ? (
           <>
-            <label>Hosted video URL<input type="url" value={lesson.videoUrl || ""} onChange={(e) => updateLesson("videoUrl", e.target.value)} placeholder="Direct MP4 or compatible hosted video URL" /></label>
-            <label>Resource URL<input type="url" value={lesson.resourceUrl || ""} onChange={(e) => updateLesson("resourceUrl", e.target.value)} placeholder="https://files/worksheet.pdf" /></label>
-            <button className="btn btn-primary" onClick={save}>Save lesson media</button>
-            {saved && <SavedNotice>Video and resource links saved in this browser.</SavedNotice>}
+            <div className="admin-media-group">
+              <span className="eyebrow">VIDEO ASSET</span>
+              <label>Video title<input value={media.videoTitle || lesson.title || ""} onChange={(e) => updateMedia("videoTitle", e.target.value)} /></label>
+              <label>Video description<textarea rows="3" value={media.videoDescription || ""} onChange={(e) => updateMedia("videoDescription", e.target.value)} /></label>
+              <label>Set or replace hosted provider asset ID<input value={media.videoAssetId || lesson.videoAssetId || ""} onChange={(e) => updateMedia("videoAssetId", e.target.value)} placeholder="Asset ID from your video provider" /></label>
+              <div className="admin-fields-two">
+                <label>Processing status<select value={media.processingStatus || "Not uploaded"} onChange={(e) => updateMedia("processingStatus", e.target.value)}><option>Not uploaded</option><option>Queued</option><option>Processing</option><option>Ready</option><option>Failed</option></select></label>
+                <label>Playback status<select value={media.playbackStatus || "Unavailable"} onChange={(e) => updateMedia("playbackStatus", e.target.value)}><option>Unavailable</option><option>Playable</option><option>Restricted</option></select></label>
+              </div>
+              <label>Visibility and access<select value={media.videoAccess || (lesson.preview ? "Public preview" : "Enrolled students")} onChange={(e) => updateMedia("videoAccess", e.target.value)}><option>Public preview</option><option>Enrolled students</option><option>Private / staff only</option></select></label>
+            </div>
+            <div className="admin-media-group">
+              <span className="eyebrow">RESOURCE FILE</span>
+              <label>File title<input value={media.resourceTitle || lesson.resourceTitle || ""} onChange={(e) => updateMedia("resourceTitle", e.target.value)} /></label>
+              <label>Set or replace resource asset identifier<input value={media.resourceAssetId || lesson.resourceAssetId || ""} onChange={(e) => updateMedia("resourceAssetId", e.target.value)} placeholder="Stored file ID from your asset service" /></label>
+              <div className="admin-fields-two">
+                <label>File type<input value={media.resourceType || ""} onChange={(e) => updateMedia("resourceType", e.target.value)} placeholder="PDF, ZIP, MP4…" /></label>
+                <label>File size<input value={media.resourceSize || ""} onChange={(e) => updateMedia("resourceSize", e.target.value)} placeholder="e.g. 12 MB" /></label>
+              </div>
+              <label>Resource access<select value={media.resourceAccess || "Enrolled students"} onChange={(e) => updateMedia("resourceAccess", e.target.value)}><option>Public</option><option>Enrolled students</option><option>Private / staff only</option></select></label>
+            </div>
+            <div className="admin-actions-inline">
+              <button type="button" className="btn btn-primary" onClick={save}>Save media metadata</button>
+              <button type="button" className="btn btn-danger btn-sm" onClick={removeMedia}>Remove media</button>
+              {saved && <SavedNotice>Media metadata saved in this browser preview.</SavedNotice>}
+            </div>
           </>
         ) : <p className="muted">Add a module and lesson before attaching media.</p>}
       </section>
-      <p className="admin-disclaimer">Use URLs from a trusted host. Private video authorization and secure file storage are not provided by this demo.</p>
-    </>
+      <p className="admin-disclaimer">This browser-only preview stores asset IDs and metadata, not secure provider credentials or playback URLs. Playback authorization, file delivery, and access rules must be enforced by a backend before launch.</p>
+    </div>
   );
 }
 
 export function StudentManagement() {
   const [students, setStudents] = useState(getAdminStudents);
   const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState("");
 
-  function updateStudent(id, change) {
+  function updateStudent(id, change, audit = null) {
+    const previous = students.find((item) => item.id === id);
     const updated = students.map((student) => student.id === id ? change(student) : student);
     setStudents(updated);
     writeAdminData(adminStorageKeys.students, updated);
+    if (audit && previous) {
+      logAdminAction({
+        ...audit,
+        targetEmail: previous.email,
+        targetName: previous.name,
+      });
+    }
   }
 
   function toggleCourse(studentRecord, courseId) {
@@ -419,35 +516,55 @@ export function StudentManagement() {
     updateStudent(studentRecord.id, (item) => ({
       ...item,
       courses: updatedCourses,
-    }));
-    const currentUser = localStorage.getItem("ownTheme_session");
-    if (currentUser && JSON.parse(currentUser).email.toLowerCase() === studentRecord.email.toLowerCase()) {
-      const savedEnrollment = localStorage.getItem("ownTheme_enrolled");
-      const currentEnrollment = savedEnrollment ? JSON.parse(savedEnrollment) : student.enrolled;
-      const updatedEnrollment = courses.flatMap((course) => {
-        const existing = currentEnrollment.find((item) => item.courseId === course.id);
-        if (!updatedCourses.includes(course.id)) return [];
-        return [existing || { courseId: course.id, completed: [] }];
-      });
-      student.enrolled.splice(0, student.enrolled.length, ...updatedEnrollment);
-      localStorage.setItem("ownTheme_enrolled", JSON.stringify(updatedEnrollment));
-    }
+    }), {
+      type: "enrollment_access_changed",
+      summary: `${enrolled ? "Removed" : "Granted"} ${courses.find((item) => item.id === courseId)?.title || courseId} enrollment`,
+      courseId,
+    });
+    const currentEnrollment = getUserEnrollments(student.enrolled, studentRecord.email);
+    const updatedEnrollment = courses.flatMap((course) => {
+      const existing = currentEnrollment.find((item) => item.courseId === course.id);
+      if (!updatedCourses.includes(course.id)) return [];
+      return [existing || { courseId: course.id, completed: [] }];
+    });
+    saveUserEnrollments(updatedEnrollment, studentRecord.email);
   }
 
-  const shown = students.filter((item) => `${item.name} ${item.email}`.toLowerCase().includes(query.toLowerCase()));
+  const shown = students.filter((item) => `${item.name} ${item.email}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const selectedStudent = students.find((item) => item.id === selectedId);
+  const selectedEmail = selectedStudent?.email.toLowerCase();
+  const orders = readAdminData(adminStorageKeys.orders, []).filter((item) => item.email?.toLowerCase() === selectedEmail);
+  const assignments = readAdminData(adminStorageKeys.assignments, []).filter((item) => item.studentEmail?.toLowerCase() === selectedEmail);
+  const auditHistory = readAdminData(adminStorageKeys.auditLog, []).filter((item) => item.targetEmail?.toLowerCase() === selectedEmail).slice(0, 8);
+  const currentEnrollments = selectedEmail
+    ? getUserEnrollments(student.enrolled, selectedEmail)
+    : [];
 
   return (
-    <>
+    <div className="admin-student-management">
       <h1>Student management</h1>
-      <p className="muted admin-description">Search the demo roster and review course access.</p>
+      <p className="muted admin-description">Search student records, review their learning history, and update demo course access.</p>
       <input className="search" aria-label="Search students" placeholder="Search by name or email..." value={query} onChange={(e) => setQuery(e.target.value)} />
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Student</th><th>Course access</th><th>Device session</th></tr></thead>
+          <thead><tr><th>Student</th><th>Account status</th><th>Course access</th><th>Details</th></tr></thead>
           <tbody>
             {shown.map((item) => (
               <tr key={item.id}>
                 <td>{item.name}<small>{item.email}</small></td>
+                <td>
+                  <span className={`status-pill ${item.accountStatus === "Suspended" ? "admin-status-suspended" : ""}`}>{item.accountStatus || "Active"}</span>
+                  <button
+                    className={`btn btn-sm ${item.accountStatus === "Suspended" ? "btn-outline" : "btn-danger"} admin-reset`}
+                    onClick={() => {
+                      const nextStatus = item.accountStatus === "Suspended" ? "Active" : "Suspended";
+                      updateStudent(item.id, (record) => ({ ...record, accountStatus: nextStatus }), {
+                        type: "account_status_changed",
+                        summary: `Account status changed to ${nextStatus}`,
+                      });
+                    }}
+                  >{item.accountStatus === "Suspended" ? "Reactivate (demo)" : "Suspend (demo)"}</button>
+                </td>
                 <td><div className="chips">{courses.map((course) => (
                   <button
                     className={item.courses.includes(course.id) ? "chip on" : "chip"}
@@ -456,32 +573,108 @@ export function StudentManagement() {
                     aria-pressed={item.courses.includes(course.id)}
                   >{course.title}</button>
                 ))}</div></td>
-                <td>{item.device || <span className="muted">No active session</span>}
-                  {item.device && <button className="btn btn-danger btn-sm admin-reset" onClick={() => updateStudent(item.id, (record) => ({ ...record, device: null }))}>Reset demo session</button>}
-                </td>
+                <td><button className="btn btn-outline btn-sm" onClick={() => setSelectedId(selectedId === item.id ? "" : item.id)}>{selectedId === item.id ? "Hide details" : "View details"}</button></td>
               </tr>
             ))}
-            {!shown.length && <tr><td className="muted" colSpan="3">No students found.</td></tr>}
+            {!shown.length && <tr><td className="muted" colSpan="4">No students found.</td></tr>}
           </tbody>
         </table>
       </div>
-      <p className="admin-disclaimer">Access changes update the demo roster only; production permissions must be enforced by an authenticated server.</p>
-    </>
+      {selectedStudent && (
+        <section className="admin-student-detail admin-edit-card">
+          <div className="admin-heading-row">
+            <div><span className="eyebrow">STUDENT RECORD</span><h2>{selectedStudent.name}</h2><p className="muted">{selectedStudent.email}</p></div>
+            <span className="status-pill">{selectedStudent.accountStatus || "Active"}</span>
+          </div>
+          <div className="admin-student-detail-grid">
+            <section><h3>Enrollment history</h3>
+              {selectedStudent.courses.length ? <ul>{selectedStudent.courses.map((id) => {
+                const course = courses.find((item) => item.id === id);
+                const enrollment = currentEnrollments.find((item) => item.courseId === id);
+                const progress = course && enrollment ? getProgress(course, enrollment.completed || []) : null;
+                return <li key={id}>{course?.title || id}{progress != null ? ` · ${progress}% complete` : " · progress unavailable"}</li>;
+              })}</ul> : <p className="muted">No course enrollments are recorded.</p>}
+            </section>
+            <section><h3>Purchase history</h3>
+              {orders.length ? <ul>{orders.map((order) => <li key={order.id}>{order.item === "bundle" ? "Complete Bundle" : courses.find((course) => course.id === order.item)?.title || order.item} · {order.status || "Status unavailable"}{order.amount != null ? ` · $${order.amount}` : ""}</li>)}</ul> : <p className="muted">No purchase records found for this account.</p>}
+            </section>
+            <section><h3>Assignment history</h3>
+              {assignments.length ? <ul>{assignments.map((item) => <li key={item.id}>{item.title || "Assignment"} · {item.status || "Status unavailable"}</li>)}</ul> : <p className="muted">No assignment history found for this account.</p>}
+            </section>
+            <section><h3>Device session</h3>
+              {selectedStudent.device ? <><p>{selectedStudent.device}<small> Active {selectedStudent.lastActive || "time unavailable"}</small></p><button className="btn btn-danger btn-sm" onClick={() => updateStudent(selectedStudent.id, (record) => ({ ...record, device: null }), { type: "demo_session_reset", summary: "Demo device session reset" })}>Reset demo session</button></> : <p className="muted">No active session recorded.</p>}
+            </section>
+          </div>
+          <section className="admin-student-audit">
+            <h3>Recent access-change audit</h3>
+            {auditHistory.length ? <ul>{auditHistory.map((entry) => <li key={entry.id}><span>{entry.summary}</span><small>{entry.actor} · {new Date(entry.createdAt).toLocaleString()}</small></li>)}</ul> : <p className="muted">No access-change actions recorded.</p>}
+          </section>
+          <p className="admin-security-warning">Admin role changes are not available in this browser preview. Granting or removing administrative privileges requires authenticated server-side authorization and an immutable audit log.</p>
+        </section>
+      )}
+      <p className="admin-disclaimer">Access changes and audit entries are browser-local demo records, not effective account controls. Production account enforcement and auditable actions require a trusted server.</p>
+    </div>
   );
 }
 
 export function OrdersReview() {
   const [orders, setOrders] = useState(getAdminOrders);
+  const [selectedOrderId, setSelectedOrderId] = useState("");
+  const [filter, setFilter] = useState("All orders");
+  const [savedNotice, setSavedNotice] = useState("");
+  const [providerReferenceDrafts, setProviderReferenceDrafts] = useState({});
+  const manualPayment = (order) => /manual|bank|transfer|cash/i.test(`${order.method || ""} ${order.provider || ""}`);
+  const pendingManualOrders = orders.filter((order) => manualPayment(order) && /pending/i.test(order.status || ""));
+  const filteredOrders = filter === "Pending manual payment"
+    ? pendingManualOrders
+    : filter === "Refunded or cancelled"
+      ? orders.filter((order) => /refund|cancel/i.test(`${order.status || ""} ${order.refundStatus || ""}`))
+      : orders;
+  const selectedOrder = orders.find((order) => order.id === selectedOrderId);
 
-  function updateOrder(id, status) {
+  function updateOrder(id, patch) {
     const order = orders.find((item) => item.id === id);
-    const updated = orders.map((order) => order.id === id ? { ...order, status } : order);
+    if (!order) return;
+    const status = patch.status ?? order.status;
+    const statusChanged = status !== order.status;
+    const refundChanged = patch.refundStatus !== undefined && patch.refundStatus !== order.refundStatus;
+    const cancellationChanged = patch.cancellationStatus !== undefined && patch.cancellationStatus !== order.cancellationStatus;
+    const referenceChanged = patch.providerReference !== undefined && patch.providerReference !== order.providerReference;
+    if (!statusChanged && !refundChanged && !cancellationChanged && !referenceChanged) {
+      setSavedNotice("No order changes to save.");
+      return;
+    }
+    const now = new Date().toISOString();
+    const eventLabel = refundChanged
+      ? `Refund status: ${patch.refundStatus}`
+      : cancellationChanged
+        ? `Cancellation status: ${patch.cancellationStatus}`
+        : statusChanged
+          ? `Payment status: ${status}`
+          : "Provider reference updated";
+    const history = [
+      ...(order.history || []),
+      { id: crypto.randomUUID(), event: eventLabel, status, createdAt: now, reference: patch.providerReference ?? order.providerReference ?? "" },
+    ];
+    const updated = orders.map((item) => item.id === id ? { ...item, ...patch, history, updatedAt: now } : item);
     setOrders(updated);
     writeAdminData(adminStorageKeys.orders, updated);
-    if (order && order.status !== status) {
+    setSavedNotice(`Order update saved in this browser preview. No payment provider was contacted.`);
+    if (statusChanged || refundChanged || cancellationChanged || referenceChanged) {
+      logAdminAction({
+        type: referenceChanged && !statusChanged && !refundChanged && !cancellationChanged
+          ? "financial_record_reference_updated"
+          : "financial_record_status_changed",
+        targetEmail: order.email || "",
+        targetName: order.student || "",
+        orderId: order.id,
+        summary: `${order.id}: ${eventLabel}`,
+      });
+    }
+    if (statusChanged || refundChanged || cancellationChanged) {
       addStudentNotification(order.email, {
-        title: "Order status updated",
-        message: `Order ${order.id} is now marked “${status}”.`,
+        title: "Order information updated",
+        message: `Order ${order.id}: ${eventLabel}.`,
         type: "order_status",
         href: `/app/billing#billing-history`,
       });
@@ -489,60 +682,117 @@ export function OrdersReview() {
   }
 
   return (
-    <>
+    <div className="admin-orders-review">
       <h1>Orders & payment review</h1>
-      <p className="muted admin-description">Review demo checkouts and update their review status.</p>
+      <p className="muted admin-description">Review order records, payment references, and any supported refund or cancellation updates.</p>
+      <section className="admin-manual-payment-queue">
+        <div><span className="eyebrow">MANUAL PAYMENT REVIEW</span><strong>{pendingManualOrders.length} pending</strong><p>Only orders explicitly marked as manual payment and pending appear here. Online payment status must come from verified provider notifications, which are not connected in this preview.</p></div>
+        <button type="button" className="btn btn-outline btn-sm" onClick={() => setFilter(filter === "Pending manual payment" ? "All orders" : "Pending manual payment")}>{filter === "Pending manual payment" ? "Show all orders" : "Open pending queue"}</button>
+      </section>
+      <label className="admin-order-filter">Filter orders
+        <select value={filter} onChange={(event) => setFilter(event.target.value)}>
+          <option>All orders</option><option>Pending manual payment</option><option>Refunded or cancelled</option>
+        </select>
+      </label>
+      {savedNotice && <SavedNotice>{savedNotice}</SavedNotice>}
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Order</th><th>Customer</th><th>Item</th><th>Amount</th><th>Method / date</th><th>Status</th><th>Review</th></tr></thead>
+          <thead><tr><th>Order reference</th><th>Student</th><th>Purchased item</th><th>Amount</th><th>Provider / method</th><th>Payment status</th><th>Details</th></tr></thead>
           <tbody>
-            {orders.map((order) => (
+            {filteredOrders.map((order) => (
               <tr key={order.id}>
-                <td><small>{order.id}</small></td>
-                <td>{order.student}<small>{order.email || "Demo record"}</small></td>
-                <td>{order.item === "bundle" ? "Complete Bundle" : courses.find((course) => course.id === order.item)?.title || order.item}</td>
-                <td>${order.amount}</td>
-                <td>{order.method}<small>{order.date}</small></td>
-                <td><span className="status-pill">{order.status}</span></td>
-                <td><div className="admin-actions-inline">
-                  <button className="btn btn-outline btn-sm" onClick={() => updateOrder(order.id, "Reviewed locally")}>Mark reviewed</button>
-                  <button className="btn btn-danger btn-sm" onClick={() => updateOrder(order.id, "Follow-up needed")}>Flag</button>
-                </div></td>
+                <td>{order.reference || order.id}<small>{order.date || order.createdAt || "Date unavailable"}</small></td>
+                <td>{order.student || order.name || "Student unavailable"}<small>{order.email || "Email unavailable"}</small></td>
+                <td>{order.item === "bundle" ? "Complete Bundle" : order.item === "subscription" ? "Subscription" : courses.find((course) => course.id === order.item)?.title || order.item || "Item unavailable"}</td>
+                <td>{order.currency || "USD"} {order.amount ?? "Not recorded"}</td>
+                <td>{order.provider || order.method || "Not recorded"}<small>{order.providerReference || "No provider reference"}</small></td>
+                <td><span className="status-pill">{order.status || "Status unavailable"}</span></td>
+                <td><button className="btn btn-outline btn-sm" type="button" onClick={() => setSelectedOrderId(selectedOrderId === order.id ? "" : order.id)}>{selectedOrderId === order.id ? "Hide details" : "Review order"}</button></td>
               </tr>
             ))}
+            {!filteredOrders.length && <tr><td className="muted" colSpan="7">{filter === "Pending manual payment" ? "No pending manual payments." : "No orders match this filter."}</td></tr>}
           </tbody>
         </table>
       </div>
-      <p className="admin-disclaimer">No payment provider is connected. Review actions only annotate locally stored demo orders; do not treat these as verified payments.</p>
-    </>
+      {selectedOrder && <section className="admin-order-detail admin-edit-card">
+        <div className="admin-heading-row"><div><span className="eyebrow">ORDER DETAILS</span><h2>{selectedOrder.reference || selectedOrder.id}</h2><p className="muted">{selectedOrder.student || selectedOrder.name || "Student unavailable"} · {selectedOrder.email || "Email unavailable"}</p></div><span className="status-pill">{selectedOrder.status || "Status unavailable"}</span></div>
+        <div className="admin-order-fields">
+          <label>Payment status<select disabled={!manualPayment(selectedOrder)} value={selectedOrder.status || "Pending"} onChange={(event) => updateOrder(selectedOrder.id, { status: event.target.value })}>
+            {manualPayment(selectedOrder)
+              ? ["Pending", "Received (manual review)", "Rejected (manual review)", "Cancelled"].map((status) => <option key={status}>{status}</option>)
+              : <option>{selectedOrder.status || "Status unavailable"}</option>}
+          </select></label>
+          <label>Provider reference<input value={providerReferenceDrafts[selectedOrder.id] ?? selectedOrder.providerReference ?? ""} onChange={(event) => setProviderReferenceDrafts((current) => ({ ...current, [selectedOrder.id]: event.target.value }))} placeholder="Reference supplied by payment provider" /></label>
+          <label>Refund status<select value={selectedOrder.refundStatus || "Not requested"} onChange={(event) => updateOrder(selectedOrder.id, { refundStatus: event.target.value })}><option>Not requested</option><option>Requested</option><option>Pending</option><option>Refunded</option><option>Declined</option><option>Not supported</option></select></label>
+          <label>Cancellation status<select value={selectedOrder.cancellationStatus || "Not requested"} onChange={(event) => updateOrder(selectedOrder.id, { cancellationStatus: event.target.value })}><option>Not requested</option><option>Requested</option><option>Cancelled</option><option>Declined</option><option>Not applicable</option></select></label>
+        </div>
+        {!manualPayment(selectedOrder) && <p className="admin-disclaimer">Payment status is read-only here. Online payment status can only be updated by verified provider notifications on the backend.</p>}
+        <button type="button" className="btn btn-primary btn-sm" onClick={() => {
+          const providerReference = providerReferenceDrafts[selectedOrder.id] ?? selectedOrder.providerReference ?? "";
+          updateOrder(selectedOrder.id, { providerReference });
+          setProviderReferenceDrafts((current) => {
+            const updated = { ...current };
+            delete updated[selectedOrder.id];
+            return updated;
+          });
+        }}>Save order reference</button>
+        <section className="admin-order-history"><h3>Transaction history</h3>{selectedOrder.history?.length ? <ul>{[...selectedOrder.history].reverse().map((entry) => <li key={entry.id}><span>{entry.event || entry.status || "Order event"}</span><small>{entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "Date unavailable"}{entry.reference ? ` · ${entry.reference}` : ""}</small></li>)}</ul> : <p className="muted">No transaction history is recorded for this order.</p>}</section>
+      </section>}
+      <p className="admin-disclaimer">Local edits only. Do not mark an online payment paid based on browser data: payment status must be updated by verified provider notifications. No refunds or cancellations are processed here.</p>
+    </div>
   );
 }
 
-export function AssignmentReview() {
+export function AssignmentReview({ submissionId = "" }) {
   const [assignments, setAssignments] = useState(() => readAdminData(adminStorageKeys.assignments, []));
   const [drafts, setDrafts] = useState({});
   const [statuses, setStatuses] = useState({});
+  const [criterionDrafts, setCriterionDrafts] = useState({});
+  const [savedNotice, setSavedNotice] = useState("");
+  const navigate = useNavigate();
+  const statusesToReview = ["Submitted", "Under Review", "Revision Requested", "Completed"];
+  const submissions = assignments.filter((item) => item.status !== "Draft" && (item.submittedAt || statusesToReview.includes(item.status)));
+  const selectedSubmission = submissionId ? submissions.find((item) => item.id === submissionId) : null;
 
   function updateAssignment(id, patch) {
     const updated = assignments.map((item) => item.id === id ? { ...item, ...patch } : item);
     setAssignments(updated);
     writeAdminData(adminStorageKeys.assignments, updated);
+    return updated.find((item) => item.id === id);
   }
 
-  function saveFeedback(item) {
+  function saveFeedback(item, requestedStatus) {
     const feedback = (drafts[item.id] ?? item.feedback ?? "").trim();
-    const status = statuses[item.id] || (["Feedback sent", "Submitted"].includes(item.status) ? "Under Review" : item.status) || "Under Review";
+    const status = requestedStatus || statuses[item.id] || item.status || "Under Review";
     const previousFeedback = item.feedbackHistory?.at(-1)?.comment || item.feedback || "";
-    const feedbackHistory = feedback && feedback !== previousFeedback
-      ? [...(item.feedbackHistory || []), { comment: feedback, status, createdAt: new Date().toISOString() }]
-      : item.feedbackHistory || [];
+    const criteriaValues = criterionDrafts[item.id] || item.criterionFeedback || {};
+    const now = new Date().toISOString();
+    const criteria = Object.entries(criteriaValues)
+      .filter(([, comment]) => comment?.trim())
+      .map(([criterion, comment]) => `${criterion}: ${comment.trim()}`);
+    const changed = feedback !== previousFeedback || status !== item.status || JSON.stringify(criteriaValues) !== JSON.stringify(item.criterionFeedback || {});
+    if (!changed) {
+      setSavedNotice("No review changes to save.");
+      return;
+    }
+    const feedbackHistory = [
+      ...(item.feedbackHistory || []),
+      { comment: feedback, status, criteria, createdAt: now },
+    ];
+    const reviewHistory = [
+      ...(item.reviewHistory || []),
+      { status, comment: feedback, criteria, createdAt: now },
+    ];
     updateAssignment(item.id, {
       feedback,
       feedbackHistory,
+      criterionFeedback: criteriaValues,
+      reviewHistory,
       status,
       revisionRequirements: status === "Revision Requested" ? feedback : "",
+      reviewedAt: now,
     });
-    if (feedback !== previousFeedback || status !== item.status) {
+    if (item.studentEmail) {
       addStudentNotification(item.studentEmail, {
         title: status === "Revision Requested" ? "Revision requested" : status === "Completed" ? "Assignment review complete" : "Instructor feedback received",
         message: feedback || `${item.title} status changed to ${status}.`,
@@ -550,30 +800,102 @@ export function AssignmentReview() {
         href: `/app/feedback/${item.id}`,
       });
     }
-    setDrafts((value) => ({ ...value, [item.id]: feedback }));
+    setSavedNotice("Review saved in this browser preview. No backend has confirmed this update.");
   }
 
+  const getStudentName = (email) => getAdminStudents().find((record) => record.email?.toLowerCase() === email?.toLowerCase())?.name || email || "Student unavailable";
+  const previousSubmissions = selectedSubmission
+    ? submissions.filter((item) => item.id !== selectedSubmission.id
+      && item.assignmentId === selectedSubmission.assignmentId
+      && item.studentEmail?.toLowerCase() === selectedSubmission.studentEmail?.toLowerCase())
+      .sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0))
+    : [];
+  const criteria = Array.isArray(selectedSubmission?.criteria)
+    ? selectedSubmission.criteria
+    : selectedSubmission?.evaluationCriteria || [];
+  const selectedCourse = courses.find((course) => course.id === selectedSubmission?.courseId);
+  const configuredAssignment = selectedCourse?.modules.flatMap((module, moduleIndex) => {
+    const moduleAssignments = Array.isArray(module.assignments)
+      ? module.assignments
+      : module.assignment
+        ? [module.assignment]
+        : module.assignmentTitle
+          ? [{ title: module.assignmentTitle, description: module.assignmentDescription, criteria: module.criteria }]
+          : [];
+    return moduleAssignments.map((assignment, assignmentIndex) => ({
+      ...(typeof assignment === "string" ? { title: assignment } : assignment),
+      id: String(assignment.id || `${selectedCourse.id}-${moduleIndex}-${assignmentIndex}`),
+    }));
+  }).find((assignment) => assignment.id === selectedSubmission?.assignmentId || assignment.title === selectedSubmission?.title);
+  const assignmentBrief = selectedSubmission?.instructions || selectedSubmission?.objective || configuredAssignment?.instructions || configuredAssignment?.description;
+  const reviewCriteria = criteria.length ? criteria : configuredAssignment?.criteria || configuredAssignment?.evaluationCriteria || [];
+  const themeSheet = selectedSubmission?.themeSheetSnapshot;
+
   return (
-    <>
+    <div className="admin-assignment-review">
       <h1>Assignment review queue</h1>
-      <p className="muted admin-description">Read project notes and save instructor feedback for students.</p>
-      {assignments.length ? (
-        <div className="admin-review-list">
-          {assignments.map((item) => (
-            <article className="admin-review-card" key={item.id}>
-              <div className="admin-heading-row">
-                <div><span className="eyebrow">{courses.find((c) => c.id === item.courseId)?.title || item.courseId}</span><h2>{item.title}</h2><p>{item.notes || "No student note provided."}</p></div>
-                <span className="status-pill">{item.status || "Submitted"}</span>
+      <p className="muted admin-description">Prioritize submitted work, review each submission and its history, then save structured feedback.</p>
+      {submissionId ? (
+        selectedSubmission ? (
+          <section className="admin-assignment-detail admin-edit-card">
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => navigate("/admin/assignments")}>← Back to queue</button>
+            <div className="admin-heading-row">
+              <div><span className="eyebrow">{courses.find((course) => course.id === selectedSubmission.courseId)?.title || "Course unavailable"}</span><h2>{selectedSubmission.title || "Assignment submission"}</h2><p>{getStudentName(selectedSubmission.studentEmail)} · {selectedSubmission.studentEmail || "Email unavailable"}</p></div>
+              <span className="status-pill">{selectedSubmission.status || "Submitted"}</span>
+            </div>
+            <section className="admin-assignment-brief"><h3>Assignment brief & evaluation criteria</h3><p>{assignmentBrief || "Assignment brief was not copied into this submission."}</p>
+              {reviewCriteria.length ? <ul>{reviewCriteria.map((criterion, index) => <li key={`${index}-${typeof criterion === "string" ? criterion : criterion.title}`}>{typeof criterion === "string" ? criterion : criterion.title}{typeof criterion !== "string" && criterion.description ? ` — ${criterion.description}` : ""}</li>)}</ul> : <p className="muted">No evaluation criteria were recorded.</p>}
+            </section>
+            <section className="admin-assignment-brief"><h3>Student submission</h3><p>Submitted {selectedSubmission.submittedAt ? new Date(selectedSubmission.submittedAt).toLocaleString() : "date unavailable"}</p>
+              {selectedSubmission.url && /^https?:\/\//i.test(selectedSubmission.url) ? <a href={selectedSubmission.url} target="_blank" rel="noreferrer">Open submitted work ↗</a> : <p className="muted">No valid work link is attached.</p>}
+              <p>{selectedSubmission.notes || "No student note attached."}</p>
+            </section>
+            {themeSheet && <section className="admin-assignment-brief"><h3>Attached Theme Sheet · {themeSheet.title || "Untitled"}</h3>
+              {themeSheet.values && Object.entries(themeSheet.values).map(([element, value]) => value && <p key={element}><strong>{element}:</strong> {value}</p>)}
+            </section>}
+            {previousSubmissions.length > 0 && <section className="admin-assignment-brief"><h3>Previous submissions</h3><ul>{previousSubmissions.map((previous) => <li key={previous.id}><Link to={`/admin/assignments/${previous.id}`}>Revision {previous.revision || "—"} · {previous.status || "Status unavailable"} · {previous.submittedAt ? new Date(previous.submittedAt).toLocaleString() : "Date unavailable"}</Link>{previous.url && <a href={previous.url} target="_blank" rel="noreferrer"> · Open work ↗</a>}</li>)}</ul></section>}
+            <section className="admin-assignment-brief"><h3>Instructor review</h3>
+              <label className="admin-feedback-label">Instructor comments<textarea rows="5" value={drafts[selectedSubmission.id] ?? selectedSubmission.feedback ?? ""} onChange={(event) => setDrafts((current) => ({ ...current, [selectedSubmission.id]: event.target.value }))} placeholder="Share specific, constructive feedback…" /></label>
+              {reviewCriteria.length > 0 && <div className="admin-criterion-feedback"><h4>Feedback by criterion</h4>{reviewCriteria.map((criterion, index) => {
+                const title = typeof criterion === "string" ? criterion : criterion.title || `Criterion ${index + 1}`;
+                const current = criterionDrafts[selectedSubmission.id] || selectedSubmission.criterionFeedback || {};
+                return <label className="admin-feedback-label" key={`${index}-${title}`}>{title}<textarea rows="2" value={current[title] || ""} onChange={(event) => setCriterionDrafts((all) => ({ ...all, [selectedSubmission.id]: { ...(all[selectedSubmission.id] || selectedSubmission.criterionFeedback || {}), [title]: event.target.value } }))} placeholder="Optional notes for this criterion" /></label>;
+              })}</div>}
+              <label className="admin-feedback-label">Review status<select value={statuses[selectedSubmission.id] || selectedSubmission.status || "Submitted"} onChange={(event) => setStatuses((current) => ({ ...current, [selectedSubmission.id]: event.target.value }))}>{statusesToReview.map((status) => <option key={status}>{status}</option>)}</select></label>
+              <div className="admin-actions-inline">
+                <button type="button" className="btn btn-outline btn-sm" onClick={() => saveFeedback(selectedSubmission, "Under Review")}>Save review</button>
+                <button type="button" className="btn btn-outline btn-sm" onClick={() => saveFeedback(selectedSubmission, "Revision Requested")}>Request revision</button>
+                <button type="button" className="btn btn-outline btn-sm" onClick={() => saveFeedback(selectedSubmission, "Completed")}>Mark completed</button>
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => saveFeedback(selectedSubmission)}>Send feedback</button>
               </div>
-              <a href={item.url} target="_blank" rel="noreferrer">Open submitted project ↗</a>
-              <label className="admin-feedback-label">Instructor feedback<textarea rows="4" value={drafts[item.id] ?? item.feedback ?? ""} onChange={(e) => setDrafts({ ...drafts, [item.id]: e.target.value })} placeholder="Share specific, constructive feedback…" /></label>
-              <label className="admin-feedback-label">Submission status<select value={statuses[item.id] || (["Feedback sent", "Submitted"].includes(item.status) ? "Under Review" : item.status) || "Under Review"} onChange={(e) => setStatuses({ ...statuses, [item.id]: e.target.value })}><option>Submitted</option><option>Under Review</option><option>Revision Requested</option><option>Completed</option></select></label>
-              <button className="btn btn-primary btn-sm" onClick={() => saveFeedback(item)}>Save feedback</button>
-            </article>
-          ))}
-        </div>
-      ) : <div className="student-empty"><h2>No submissions to review.</h2><p>Student assignments will appear in this queue when submitted.</p></div>}
-    </>
+              {savedNotice && <SavedNotice>{savedNotice}</SavedNotice>}
+            </section>
+            <section className="admin-assignment-brief"><h3>Review history</h3>{selectedSubmission.reviewHistory?.length ? <ul>{[...selectedSubmission.reviewHistory].reverse().map((entry, index) => <li key={`${entry.createdAt}-${index}`}>{entry.status} · {new Date(entry.createdAt).toLocaleString()}{entry.comment ? ` — ${entry.comment}` : ""}</li>)}</ul> : <p className="muted">No instructor review history.</p>}</section>
+            <p className="admin-security-warning">This preview saves locally and may create a local notification; it cannot confirm a backend update. Production feedback and notifications must run only after the backend successfully saves the review.</p>
+          </section>
+        ) : <EmptyState title="Submission not found." description="This submission may have been removed or may still be a draft." actionLabel="Return to review queue" onAction={() => navigate("/admin/assignments")} icon="!" />
+      ) : submissions.length ? (
+        <>
+          <div className="admin-assignment-filters">{statusesToReview.map((status) => {
+            const count = submissions.filter((item) => item.status === status || (!item.status && status === "Submitted")).length;
+            return <a key={status} href={`#assignment-status-${status.replaceAll(" ", "-")}`}><span>{status}</span><strong>{count}</strong></a>;
+          })}</div>
+          {statusesToReview.map((status) => {
+            const records = submissions.filter((item) => item.status === status || (!item.status && status === "Submitted"));
+            if (!records.length) return null;
+            return <section className="admin-assignment-status-group" id={`assignment-status-${status.replaceAll(" ", "-")}`} key={status}>
+              <h2>{status}<span>{records.length}</span></h2>
+              <div className="admin-review-list">{records.map((item) => <article className="admin-review-card" key={item.id}>
+                <div className="admin-heading-row"><div><span className="eyebrow">{courses.find((course) => course.id === item.courseId)?.title || "Course unavailable"}</span><h3>{item.title || "Assignment submission"}</h3><p>{getStudentName(item.studentEmail)} · {item.studentEmail || "Email unavailable"}</p></div><span className="status-pill">{status}</span></div>
+                <p>{item.submittedAt ? `Submitted ${new Date(item.submittedAt).toLocaleString()}` : "Submission date unavailable"}</p>
+                <Link className="btn btn-primary btn-sm" to={`/admin/assignments/${item.id}`}>Review submission</Link>
+              </article>)}</div>
+            </section>;
+          })}
+        </>
+      ) : <EmptyState title="No submissions to review." description="Submitted assignments will appear in the queue when students send their work." icon="OT" />}
+      <p className="admin-disclaimer">Submission records, statuses, and local notifications are browser-preview data. Instructor review does not sync to a backend.</p>
+    </div>
   );
 }
 
@@ -632,23 +954,58 @@ export function InstructorFeedbackTools() {
 }
 
 export function PlanManagement() {
-  const initial = readAdminData(adminStorageKeys.plans, {
-    bundlePrice: 180,
-    coursePrices: { "short-form": 50, "long-form": 80, "film-doc": 100 },
-    membershipStatus: "Coming soon",
-    membershipPrice: "",
-    membershipBillingCycle: "",
-    membershipAccess: "",
-    membershipRenewalTerms: "",
-  });
-  const [plans, setPlans] = useState(initial);
+  const [plans, setPlans] = useState(getAdminPlans);
   const [saved, setSaved] = useState(false);
 
+  function updateBundle(id, patch) {
+    setPlans((current) => ({
+      ...current,
+      bundles: current.bundles.map((bundle) => bundle.id === id ? { ...bundle, ...patch } : bundle),
+    }));
+    setSaved(false);
+  }
+
+  function addBundle() {
+    setPlans((current) => ({
+      ...current,
+      bundles: [...current.bundles, {
+        id: crypto.randomUUID(),
+        title: "",
+        description: "",
+        includedCourses: [],
+        price: "",
+        currency: "USD",
+        accessDuration: "",
+        publicationStatus: "Draft",
+        availabilityStatus: "Available",
+      }],
+    }));
+    setSaved(false);
+  }
+
+  function updatePlanField(field, value) {
+    setPlans((current) => ({ ...current, [field]: value }));
+    setSaved(false);
+  }
+
   function save() {
+    const bundles = plans.bundles.map((bundle) => ({
+      ...bundle,
+      price: bundle.price === "" ? "" : Number(bundle.price),
+      includedCourses: [...new Set(bundle.includedCourses || [])],
+    }));
+    const firstAvailablePrice = bundles.find((bundle) => bundle.availabilityStatus === "Available")?.price;
     writeAdminData(adminStorageKeys.plans, {
       ...plans,
-      bundlePrice: Number(plans.bundlePrice),
+      bundles,
+      bundlePrice: firstAvailablePrice === "" || firstAvailablePrice == null
+        ? Number(plans.bundlePrice ?? 180)
+        : Number(firstAvailablePrice),
       coursePrices: Object.fromEntries(Object.entries(plans.coursePrices || {}).map(([id, price]) => [id, Number(price)])),
+    });
+    logAdminAction({
+      type: "plan_configuration_updated",
+      summary: `Saved ${bundles.length} bundle plan(s) and subscription configuration.`,
     });
     setSaved(true);
   }
@@ -656,21 +1013,69 @@ export function PlanManagement() {
   return (
     <>
       <h1>Bundles & subscription plans</h1>
-      <p className="muted admin-description">Configure course and bundle demo prices. Membership terms appear publicly only when every recurring payment and access term is supplied.</p>
-      <section className="admin-edit-card admin-plan-form">
-        <label>Complete bundle price (USD)<input type="number" min="0" step="1" value={plans.bundlePrice} onChange={(e) => { setPlans({ ...plans, bundlePrice: e.target.value }); setSaved(false); }} /></label>
-        {courses.map((course) => (
-          <label key={course.id}>{course.title} price (USD)<input type="number" min="0" step="1" value={plans.coursePrices?.[course.id] ?? 0} onChange={(e) => { setPlans({ ...plans, coursePrices: { ...plans.coursePrices, [course.id]: e.target.value } }); setSaved(false); }} /></label>
-        ))}
-        <label>Membership status<select value={plans.membershipStatus} onChange={(e) => { setPlans({ ...plans, membershipStatus: e.target.value }); setSaved(false); }}><option>Coming soon</option><option>Available</option><option>Paused</option></select></label>
-        <label>Membership recurring price<input value={plans.membershipPrice} onChange={(e) => { setPlans({ ...plans, membershipPrice: e.target.value }); setSaved(false); }} placeholder="For example, $X USD" /></label>
-        <label>Membership billing frequency<input value={plans.membershipBillingCycle || ""} onChange={(e) => { setPlans({ ...plans, membershipBillingCycle: e.target.value }); setSaved(false); }} placeholder="For example, billed monthly" /></label>
-        <label>Membership access included<textarea rows="3" value={plans.membershipAccess || ""} onChange={(e) => { setPlans({ ...plans, membershipAccess: e.target.value }); setSaved(false); }} placeholder="Specify exactly what members can access" /></label>
-        <label>Membership renewal and cancellation terms<textarea rows="3" value={plans.membershipRenewalTerms || ""} onChange={(e) => { setPlans({ ...plans, membershipRenewalTerms: e.target.value }); setSaved(false); }} placeholder="Explain renewal and cancellation terms" /></label>
-        <button className="btn btn-primary" onClick={save}>Save plans</button>
-        {saved && <SavedNotice>Plan settings saved. Public pricing refreshes after reload.</SavedNotice>}
+      <p className="muted admin-description">Manage one-time bundles separately from recurring membership. Publishing a plan does not connect checkout or process payments.</p>
+      <section className="admin-plan-section">
+        <div className="admin-heading-row"><div><h2>One-time bundles</h2><p className="muted">Each bundle has its own included courses, pricing, access terms, and publication state.</p></div><button className="btn btn-outline btn-sm" type="button" onClick={addBundle}>Add bundle</button></div>
+        <div className="admin-edit-list">
+          {plans.bundles.map((bundle) => (
+            <fieldset className="admin-edit-card admin-plan-form admin-bundle-editor" key={bundle.id}>
+              <legend>{bundle.title || "New bundle"}</legend>
+              <label>Bundle name<input required value={bundle.title} onChange={(event) => updateBundle(bundle.id, { title: event.target.value })} /></label>
+              <label>Description<textarea rows="2" value={bundle.description || ""} onChange={(event) => updateBundle(bundle.id, { description: event.target.value })} /></label>
+              <div className="admin-fields-two">
+                <label>Price<input type="number" min="0" step="0.01" value={bundle.price} onChange={(event) => updateBundle(bundle.id, { price: event.target.value })} /></label>
+                <label>Currency<input maxLength="3" value={bundle.currency || "USD"} onChange={(event) => updateBundle(bundle.id, { currency: event.target.value.toUpperCase() })} /></label>
+              </div>
+              <span className="admin-field-label">Included courses</span>
+              <div className="admin-course-checkboxes">
+                {courses.map((course) => (
+                  <label key={course.id}><input type="checkbox" checked={(bundle.includedCourses || []).includes(course.id)} onChange={(event) => updateBundle(bundle.id, {
+                    includedCourses: event.target.checked
+                      ? [...(bundle.includedCourses || []), course.id]
+                      : (bundle.includedCourses || []).filter((id) => id !== course.id),
+                  })} />{course.title}</label>
+                ))}
+              </div>
+              <label>Access duration and rules<textarea rows="2" value={bundle.accessDuration || ""} onChange={(event) => updateBundle(bundle.id, { accessDuration: event.target.value })} placeholder="Describe access term, renewal, or limits" /></label>
+              <div className="admin-fields-two">
+                <label>Publication status<select value={bundle.publicationStatus || "Draft"} onChange={(event) => updateBundle(bundle.id, { publicationStatus: event.target.value })}><option>Draft</option><option>Published</option><option>Archived</option></select></label>
+                <label>Availability<select value={bundle.availabilityStatus || "Available"} onChange={(event) => updateBundle(bundle.id, { availabilityStatus: event.target.value })}><option>Available</option><option>Paused</option><option>Sold out</option></select></label>
+              </div>
+              <button className="btn btn-danger btn-sm" type="button" onClick={() => {
+                setPlans((current) => ({ ...current, bundles: current.bundles.filter((item) => item.id !== bundle.id) }));
+                setSaved(false);
+              }}>Remove bundle</button>
+            </fieldset>
+          ))}
+          {!plans.bundles.length && <EmptyState title="No bundles configured." description="Add a bundle to define a one-time offer." actionLabel="Add bundle" onAction={addBundle} />}
+        </div>
       </section>
-      <p className="admin-disclaimer">Membership is not connected to billing. A plan set to “Available” is an editorial flag only, not a purchasable subscription. All recurring price, billing frequency, included access, and renewal/cancellation details must be confirmed before the plan is displayed as defined.</p>
+      <section className="admin-edit-card admin-plan-form">
+        <h2>Individual course prices</h2>
+        {courses.map((course) => (
+          <label key={course.id}>{course.title} price (USD)<input type="number" min="0" step="0.01" value={plans.coursePrices?.[course.id] ?? 0} onChange={(event) => {
+            setPlans((current) => ({ ...current, coursePrices: { ...current.coursePrices, [course.id]: event.target.value } }));
+            setSaved(false);
+          }} /></label>
+        ))}
+      </section>
+      <section className="admin-edit-card admin-plan-form">
+        <h2>Subscription membership</h2>
+        <p className="muted">A subscription is recurring and separate from any one-time bundle. Keep it unpublished until billing and access terms are reviewed.</p>
+        <div className="admin-fields-two">
+          <label>Publication status<select value={plans.membershipPublicationStatus || "Draft"} onChange={(event) => updatePlanField("membershipPublicationStatus", event.target.value)}><option>Draft</option><option>Published</option><option>Archived</option></select></label>
+          <label>Availability<select value={plans.membershipStatus || "Coming soon"} onChange={(event) => updatePlanField("membershipStatus", event.target.value)}><option>Coming soon</option><option>Available</option><option>Paused</option></select></label>
+        </div>
+        <div className="admin-fields-two">
+          <label>Recurring price<input type="number" min="0" step="0.01" value={plans.membershipPrice || ""} onChange={(event) => updatePlanField("membershipPrice", event.target.value)} /></label>
+          <label>Currency<input maxLength="3" value={plans.membershipCurrency || "USD"} onChange={(event) => updatePlanField("membershipCurrency", event.target.value.toUpperCase())} /></label>
+        </div>
+        <label>Billing interval<input value={plans.membershipBillingCycle || ""} onChange={(event) => updatePlanField("membershipBillingCycle", event.target.value)} placeholder="For example, billed monthly" /></label>
+        <label>Included access and rules<textarea rows="3" value={plans.membershipAccess || ""} onChange={(event) => updatePlanField("membershipAccess", event.target.value)} placeholder="Specify exactly what members can access" /></label>
+        <label>Renewal and cancellation terms<textarea rows="3" value={plans.membershipRenewalTerms || ""} onChange={(event) => updatePlanField("membershipRenewalTerms", event.target.value)} placeholder="Explain renewals, cancellation timing, and access after cancellation" /></label>
+      </section>
+      <div className="admin-save-row"><button className="btn btn-primary" type="button" onClick={save}>Save plans</button>{saved && <SavedNotice>Plan settings saved in this browser preview.</SavedNotice>}</div>
+      <p className="admin-disclaimer">Publication and availability are editorial controls only. Checkout, recurring billing, and payment verification are not connected in this preview.</p>
     </>
   );
 }
@@ -678,18 +1083,46 @@ export function PlanManagement() {
 export function ShowcaseModeration() {
   const [assignments, setAssignments] = useState(() => readAdminData(adminStorageKeys.assignments, []));
   const [projects, setProjects] = useState(() => readAdminData(adminStorageKeys.showcaseProjects, []));
+  const [notes, setNotes] = useState({});
+  const [filter, setFilter] = useState("All public requests");
 
-  function moderate(item, published) {
+  function moderate(item, action) {
     if (!item.showcaseConsent) return;
+    const moderationNote = notes[item.id]?.trim() || (action === "Changes Requested"
+      ? "Please update this project and resubmit it for review."
+      : action === "Rejected"
+        ? "This project was not approved for the public showcase."
+        : "");
+    const patch = {
+      showcasePublished: action === "Published",
+      moderationStatus: action,
+      moderationNote,
+      moderatedAt: new Date().toISOString(),
+    };
     if (item.isShowcaseProject) {
-      const updated = projects.map((record) => record.id === item.id ? { ...record, showcasePublished: published } : record);
+      const updated = projects.map((record) => record.id === item.id ? { ...record, ...patch } : record);
       setProjects(updated);
       writeAdminData(adminStorageKeys.showcaseProjects, updated);
-      return;
+    } else {
+      const updated = assignments.map((record) => record.id === item.id ? { ...record, ...patch } : record);
+      setAssignments(updated);
+      writeAdminData(adminStorageKeys.assignments, updated);
     }
-    const updated = assignments.map((record) => record.id === item.id ? { ...record, showcasePublished: published } : record);
-    setAssignments(updated);
-    writeAdminData(adminStorageKeys.assignments, updated);
+    logAdminAction({
+      type: "showcase_moderation",
+      targetEmail: item.studentEmail || "",
+      targetName: item.studentEmail || "",
+      summary: `${item.title}: ${action}`,
+    });
+    if (item.studentEmail) {
+      addStudentNotification(item.studentEmail, {
+        title: action === "Published" ? "Showcase project approved" : action === "Changes Requested" ? "Showcase changes requested" : action === "Removed" ? "Showcase project removed" : "Showcase project not approved",
+        message: moderationNote || `Your project “${item.title}” is now ${action.toLowerCase()}.`,
+        type: "showcase_moderation",
+        href: "/app/showcase",
+      });
+    }
+    setNotes((current) => ({ ...current, [item.id]: "" }));
   }
 
   const submissions = assignments.map((item) => ({ ...item, isShowcaseProject: false }));
@@ -699,32 +1132,48 @@ export function ShowcaseModeration() {
     notes: item.description || "",
     isShowcaseProject: true,
   }));
-  const reviewItems = [...submissions, ...studentProjects];
+  const reviewItems = [...submissions, ...studentProjects]
+    .filter((item) => item.showcaseConsent || item.showcasePublished)
+    .map((item) => ({
+      ...item,
+      moderationStatus: item.moderationStatus || (item.showcasePublished ? "Published" : "Pending review"),
+    }));
+  const visibleItems = filter === "All public requests"
+    ? reviewItems
+    : reviewItems.filter((item) => item.moderationStatus === filter);
+  const statusCounts = ["Pending review", "Changes Requested", "Published", "Rejected", "Removed"]
+    .map((status) => ({ status, count: reviewItems.filter((item) => item.moderationStatus === status).length }));
 
   return (
     <>
       <h1>Showcase moderation</h1>
-      <p className="muted admin-description">Only feature student work when the student has opted in.</p>
-      {reviewItems.length ? (
+      <p className="muted admin-description">Review projects only when the creator has explicitly requested public display. Consent is required before publication.</p>
+      <div className="admin-moderation-summary">
+        {statusCounts.map(({ status, count }) => <button type="button" className={filter === status ? "active" : ""} key={status} onClick={() => setFilter(filter === status ? "All public requests" : status)}><span>{status}</span><strong>{count}</strong></button>)}
+      </div>
+      <label className="admin-filter-label">Filter projects<select value={filter} onChange={(event) => setFilter(event.target.value)}><option>All public requests</option>{statusCounts.map(({ status }) => <option key={status}>{status}</option>)}</select></label>
+      {visibleItems.length ? (
         <div className="admin-review-list">
-          {reviewItems.map((item) => (
+          {visibleItems.map((item) => (
             <article className="admin-review-card" key={item.id}>
               <div className="admin-heading-row">
-                <div><span className="eyebrow">{courses.find((c) => c.id === item.courseId)?.title || item.courseId}</span><h2>{item.title}</h2>{/^https?:\/\//i.test(item.url || "") && <a href={item.url} target="_blank" rel="noreferrer">Open project ↗</a>}</div>
-                <span className="status-pill">{item.showcasePublished ? "Published" : "Private"}</span>
+                <div><span className="eyebrow">{courses.find((c) => c.id === item.courseId)?.title || item.courseId || "Own Theme project"}</span><h2>{item.title || "Untitled project"}</h2><p>{item.studentEmail || "Creator unavailable"}{item.assignmentId ? ` · Assignment ${item.assignmentId}` : ""}</p>{/^https?:\/\//i.test(item.url || "") && <a href={item.url} target="_blank" rel="noreferrer">Open project ↗</a>}</div>
+                <span className="status-pill">{item.moderationStatus}</span>
               </div>
               <p>{item.notes || "No student note provided."}</p>
-              <p className={item.showcaseConsent ? "admin-consent granted" : "admin-consent"}>
-                {item.showcaseConsent ? "Student opted in to public showcase." : "No showcase permission recorded."}
-              </p>
+              <p className="admin-consent granted">Creator requested public display · consent recorded.</p>
+              <label className="admin-feedback-label">Moderation note<textarea rows="2" value={notes[item.id] ?? item.moderationNote ?? ""} onChange={(event) => setNotes((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Optional feedback for the creator" /></label>
               <div className="admin-actions-inline">
-                <button className="btn btn-primary btn-sm" disabled={!item.showcaseConsent || !/^https?:\/\//i.test(item.url || "")} onClick={() => moderate(item, true)}>Publish</button>
-                {item.showcasePublished && <button className="btn btn-outline btn-sm" onClick={() => moderate(item, false)}>Unpublish</button>}
+                <button className="btn btn-primary btn-sm" disabled={!/^https?:\/\//i.test(item.url || "")} onClick={() => moderate(item, "Published")}>Approve & publish</button>
+                <button className="btn btn-outline btn-sm" onClick={() => moderate(item, "Changes Requested")}>Request changes</button>
+                <button className="btn btn-outline btn-sm" onClick={() => moderate(item, "Rejected")}>Reject</button>
+                {item.showcasePublished && <button className="btn btn-danger btn-sm" onClick={() => moderate(item, "Removed")}>Remove published project</button>}
               </div>
             </article>
           ))}
         </div>
-      ) : <div className="student-empty"><h2>No projects submitted.</h2><p>Submitted student projects will be listed here for moderation.</p></div>}
+      ) : <EmptyState title={filter === "All public requests" ? "No public projects to review." : `No ${filter.toLowerCase()} projects.`} description="Projects appear here only after a student requests public display and records consent." icon="OT" />}
+      <p className="admin-disclaimer">Moderation decisions and notifications are saved in this browser preview. A production workflow must persist them on the server and verify administrator permissions.</p>
     </>
   );
 }
@@ -734,12 +1183,40 @@ export function SiteSettings() {
     homeHeadline: "You don't have to follow a theme. Build one.",
     homeDescription: "Three video editing courses that teach you to design your own style, not copy a template.",
     supportEmail: "",
+    supportPhone: "",
+    brandLogoUrl: "",
+    socialLinks: { instagram: "", youtube: "" },
+    categories: ["Short-Form & Social Media", "Long-Form & YouTube", "Film & Documentary"],
+    featuredCourseIds: ["short-form", "long-form", "film-doc"],
+    legalContent: { terms: "", privacy: "", refund: "" },
+    emailNotifications: { feedback: true, assignments: true, courses: true, billing: true },
   });
-  const [settings, setSettings] = useState(initial);
+  const [settings, setSettings] = useState({
+    supportPhone: "",
+    brandLogoUrl: "",
+    socialLinks: { instagram: "", youtube: "" },
+    categories: ["Short-Form & Social Media", "Long-Form & YouTube", "Film & Documentary"],
+    featuredCourseIds: ["short-form", "long-form", "film-doc"],
+    legalContent: { terms: "", privacy: "", refund: "" },
+    emailNotifications: { feedback: true, assignments: true, courses: true, billing: true },
+    ...initial,
+  });
   const [saved, setSaved] = useState(false);
 
+  function updateSettings(field, value) {
+    setSettings((current) => ({ ...current, [field]: value }));
+    setSaved(false);
+  }
+
   function save() {
-    writeAdminData(adminStorageKeys.settings, settings);
+    writeAdminData(adminStorageKeys.settings, {
+      ...settings,
+      categories: [...new Set(settings.categories.map((category) => category.trim()).filter(Boolean))],
+    });
+    logAdminAction({
+      type: "site_settings_updated",
+      summary: "Updated site content and settings.",
+    });
     setSaved(true);
     window.dispatchEvent(new Event("ownTheme:site-settings-updated"));
   }
@@ -747,15 +1224,37 @@ export function SiteSettings() {
   return (
     <>
       <h1>Site content & settings</h1>
-      <p className="muted admin-description">Edit public-facing homepage text and support contact details.</p>
+      <p className="muted admin-description">Configure public content, brand links, support contact, and notification preferences. These settings are browser-local in this preview.</p>
       <section className="admin-edit-card admin-plan-form">
-        <label>Homepage headline<input value={settings.homeHeadline} onChange={(e) => { setSettings({ ...settings, homeHeadline: e.target.value }); setSaved(false); }} /></label>
-        <label>Homepage description<textarea rows="3" value={settings.homeDescription} onChange={(e) => { setSettings({ ...settings, homeDescription: e.target.value }); setSaved(false); }} /></label>
-        <label>Support email<input type="email" value={settings.supportEmail} onChange={(e) => { setSettings({ ...settings, supportEmail: e.target.value }); setSaved(false); }} placeholder="Not published until configured" /></label>
-        <button className="btn btn-primary" onClick={save}>Save site settings</button>
+        <h2>Homepage copy & featured courses</h2>
+        <label>Homepage headline<input value={settings.homeHeadline} onChange={(event) => updateSettings("homeHeadline", event.target.value)} /></label>
+        <label>Homepage description<textarea rows="3" value={settings.homeDescription} onChange={(event) => updateSettings("homeDescription", event.target.value)} /></label>
+        <fieldset className="admin-course-checkboxes"><legend>Featured course order</legend>{courses.map((course) => <label key={course.id}><input type="checkbox" checked={(settings.featuredCourseIds || []).includes(course.id)} onChange={(event) => updateSettings("featuredCourseIds", event.target.checked ? [...(settings.featuredCourseIds || []), course.id] : (settings.featuredCourseIds || []).filter((id) => id !== course.id))} />{course.title}</label>)}</fieldset>
+        <h2>Course categories</h2>
+        <label>One category per line<textarea rows="4" value={(settings.categories || []).join("\n")} onChange={(event) => updateSettings("categories", event.target.value.split("\n"))} /></label>
+        <p className="muted">Use the same labels as the categories assigned to courses.</p>
+        <h2>Brand assets & social links</h2>
+        <label>Logo image URL<input type="url" value={settings.brandLogoUrl || ""} onChange={(event) => updateSettings("brandLogoUrl", event.target.value)} placeholder="https://…" /></label>
+        <div className="admin-fields-two">
+          <label>Instagram URL<input type="url" value={settings.socialLinks?.instagram || ""} onChange={(event) => updateSettings("socialLinks", { ...settings.socialLinks, instagram: event.target.value })} /></label>
+          <label>YouTube URL<input type="url" value={settings.socialLinks?.youtube || ""} onChange={(event) => updateSettings("socialLinks", { ...settings.socialLinks, youtube: event.target.value })} /></label>
+        </div>
+        <h2>Support contact details</h2>
+        <label>Support email<input type="email" value={settings.supportEmail || ""} onChange={(event) => updateSettings("supportEmail", event.target.value)} placeholder="Not published until configured" /></label>
+        <label>Support phone<input type="tel" value={settings.supportPhone || ""} onChange={(event) => updateSettings("supportPhone", event.target.value)} /></label>
+        <h2>Legal page content</h2>
+        <label>Terms of service<textarea rows="5" value={settings.legalContent?.terms || ""} onChange={(event) => updateSettings("legalContent", { ...settings.legalContent, terms: event.target.value })} placeholder="Reviewed terms of service" /></label>
+        <label>Privacy policy<textarea rows="5" value={settings.legalContent?.privacy || ""} onChange={(event) => updateSettings("legalContent", { ...settings.legalContent, privacy: event.target.value })} placeholder="Reviewed privacy policy" /></label>
+        <label>Refund & cancellation policy<textarea rows="5" value={settings.legalContent?.refund || ""} onChange={(event) => updateSettings("legalContent", { ...settings.legalContent, refund: event.target.value })} placeholder="Reviewed refund and cancellation terms" /></label>
+        <h2>Email notification settings</h2>
+        <fieldset className="admin-course-checkboxes">{Object.entries({ feedback: "Instructor feedback", assignments: "Assignment updates", courses: "Course announcements", billing: "Orders and billing" }).map(([key, label]) => <label key={key}><input type="checkbox" checked={settings.emailNotifications?.[key] !== false} onChange={(event) => updateSettings("emailNotifications", { ...settings.emailNotifications, [key]: event.target.checked })} />{label}</label>)}</fieldset>
+        <p className="muted">These are configuration preferences only. No email delivery service is connected.</p>
+        <h2>Integration status</h2>
+        <div className="admin-integration-status"><p><strong>Hosted video:</strong> Not connected in this preview</p><p><strong>Payment provider:</strong> Not connected in this preview</p><p>Do not enter provider secrets here. Integrations require server-side credentials and verified callbacks.</p></div>
+        <button className="btn btn-primary" type="button" onClick={save}>Save site settings</button>
         {saved && <SavedNotice>Site settings saved in this browser.</SavedNotice>}
       </section>
-      <p className="admin-disclaimer">Homepage text changes appear after reload. Add a verified support address before publishing contact details.</p>
+      <p className="admin-disclaimer">This admin preview does not authenticate or authorize users. Production access to settings and every protected action must be enforced by the backend.</p>
     </>
   );
 }

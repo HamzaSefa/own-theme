@@ -1,8 +1,7 @@
 import { Link } from "react-router-dom";
-import { courses, student, getAllLessons, getProgress } from "../data/courses";
-import { getCurrentUser, readStudentData } from "../data/studentPortal";
+import { courses, getCurrentEnrollments, getAllLessons, getProgress } from "../data/courses";
+import { getCurrentUser, getUserSubmissions, readStudentData } from "../data/studentPortal";
 
-const ASSIGNMENTS_KEY = "ownTheme_assignments";
 const NOTIFICATIONS_KEY = "ownTheme_notifications";
 
 function getActivityDate(item) {
@@ -20,29 +19,105 @@ function getCourseProgress(course, completed) {
   return getProgress(course, completed);
 }
 
+function getOpenAssignments(enrolledCourses, submissions) {
+  return enrolledCourses.flatMap(({ course }) => course.modules.flatMap((module, moduleIndex) => {
+    const configured = Array.isArray(module.assignments)
+      ? module.assignments
+      : module.assignment
+        ? [module.assignment]
+        : module.assignmentTitle
+          ? [{ title: module.assignmentTitle, description: module.assignmentDescription }]
+          : [];
+
+    return configured.flatMap((assignment, assignmentIndex) => {
+      const details = typeof assignment === "string" ? { title: assignment } : assignment;
+      const id = String(details.id || `${course.id}-${moduleIndex}-${assignmentIndex}`);
+      const title = details.title || "Course assignment";
+      const submission = submissions.find((item) =>
+        item.assignmentId === id || (!item.assignmentId && item.title === title && item.courseId === course.id)
+      );
+      if (submission && submission.status !== "Draft") return [];
+      return [{ id, title, courseTitle: course.title, submission }];
+    });
+  }));
+}
+
 export default function Dashboard() {
   const user = getCurrentUser();
-  const name = user?.name?.trim().split(/\s+/)[0] || "editor";
-  const enrolledCourses = student.enrolled
+  const name = user?.name?.trim() || "editor";
+  const email = user?.email?.trim().toLowerCase();
+  const enrolledCourses = getCurrentEnrollments()
     .map((enrollment) => ({
       course: courses.find((course) => course.id === enrollment.courseId),
       completed: enrollment.completed || [],
     }))
     .filter(({ course }) => course);
-  const assignments = readStudentData(ASSIGNMENTS_KEY, []);
-  const notifications = readStudentData(NOTIFICATIONS_KEY, []);
-  const feedbackItems = assignments.filter((assignment) => assignment.feedback?.trim());
-  const pendingReview = assignments.filter((assignment) => assignment.status === "Submitted");
+  const assignments = getUserSubmissions();
+  const openAssignments = getOpenAssignments(enrolledCourses, assignments);
+  const notifications = readStudentData(NOTIFICATIONS_KEY, []).filter(
+    (notification) => notification.recipientEmail?.trim().toLowerCase() === email,
+  );
+  const feedbackItems = assignments.filter((assignment) =>
+    assignment.feedback?.trim() || assignment.feedbackHistory?.length
+  );
+  const pendingReview = assignments.filter((assignment) =>
+    ["Submitted", "Under Review"].includes(assignment.status)
+  );
   const completedLessons = enrolledCourses.reduce((total, item) => total + item.completed.length, 0);
   const totalLessons = enrolledCourses.reduce((total, item) => total + getAllLessons(item.course).length, 0);
   const overallProgress = totalLessons ? Math.round((completedLessons / totalLessons) * 100) : 0;
   const currentCourse = enrolledCourses.find(({ course, completed }) =>
     getAllLessons(course).some((lesson) => !completed.includes(lesson.id))
-  ) || enrolledCourses[0];
+  );
   const nextLesson = currentCourse && (
     getAllLessons(currentCourse.course).find((lesson) => !currentCourse.completed.includes(lesson.id))
-    || getAllLessons(currentCourse.course)[0]
   );
+  const revisionRequested = assignments.find((item) => item.status === "Revision Requested");
+  const unreadFeedback = assignments.find((item) =>
+    (item.feedback?.trim() || item.feedbackHistory?.length)
+    && !item.reviewedByStudentAt
+  );
+  const nextAction = revisionRequested
+    ? {
+        eyebrow: "REVISION REQUESTED",
+        title: revisionRequested.title,
+        description: revisionRequested.revisionRequirements || "Your instructor requested a revision. Review the feedback and update your submission.",
+        to: `/app/assignments/${revisionRequested.assignmentId || revisionRequested.id}`,
+        label: "Revise and resubmit",
+      }
+    : unreadFeedback
+      ? {
+          eyebrow: "NEW INSTRUCTOR FEEDBACK",
+          title: unreadFeedback.title,
+          description: "Your instructor has reviewed this submission. Read the feedback before continuing.",
+          to: `/app/feedback/${unreadFeedback.id}`,
+          label: "Read feedback",
+        }
+      : openAssignments.length
+        ? {
+            eyebrow: openAssignments[0].submission ? "DRAFT ASSIGNMENT" : "ASSIGNMENT TO DO",
+            title: openAssignments[0].title,
+            description: `${openAssignments[0].courseTitle} · ${openAssignments[0].submission ? "Finish and submit your saved draft." : "Open the brief, review the requirements, and submit your work."}`,
+            to: `/app/assignments/${openAssignments[0].id}`,
+            label: openAssignments[0].submission ? "Continue draft" : "Open assignment",
+          }
+      : currentCourse && nextLesson
+        ? {
+            eyebrow: "CONTINUE LEARNING",
+            title: currentCourse.course.title,
+            description: nextLesson.title,
+            to: `/app/learn/${nextLesson.id}`,
+            label: "Continue lesson",
+          }
+        : {
+            eyebrow: "YOUR NEXT STEP",
+            title: enrolledCourses.length ? "You’re up to date." : "Start your learning journey.",
+            description: enrolledCourses.length
+              ? "You’ve completed the lessons currently available in your courses."
+              : "Explore the course catalog and choose a learning track.",
+            to: enrolledCourses.length ? "/app/courses" : "/courses",
+            label: enrolledCourses.length ? "Review my courses" : "Explore courses",
+          };
   const activity = [
     ...notifications.map((item) => ({
       id: `notification-${item.id}`,
@@ -50,6 +125,7 @@ export default function Dashboard() {
       detail: item.message,
       date: getActivityDate(item),
       type: "UPDATE",
+      to: item.href || "/app/notifications",
     })),
     ...assignments.map((item) => ({
       id: `assignment-${item.id}`,
@@ -57,6 +133,9 @@ export default function Dashboard() {
       detail: item.feedback || `Your work is ${item.status?.toLowerCase() || "saved"}.`,
       date: getActivityDate(item),
       type: item.feedback ? "FEEDBACK" : "ASSIGNMENT",
+      to: item.feedback
+        ? `/app/feedback/${item.id}`
+        : `/app/assignments/${item.assignmentId || item.id}`,
     })),
   ]
     .sort((a, b) => (b.date?.getTime() || 0) - (a.date?.getTime() || 0))
@@ -72,11 +151,11 @@ export default function Dashboard() {
 
       <section className="student-continue-panel" aria-labelledby="continue-title">
         <div className="student-continue-copy">
-          <span className="eyebrow">CONTINUE LEARNING</span>
-          {currentCourse && nextLesson ? (
+          <span className="eyebrow">{nextAction.eyebrow}</span>
+          <h2 id="continue-title">{nextAction.title}</h2>
+          <p>{nextAction.description}</p>
+          {nextAction.eyebrow === "CONTINUE LEARNING" && currentCourse ? (
             <>
-              <h2 id="continue-title">{currentCourse.course.title}</h2>
-              <p>{nextLesson.title}</p>
               <div className="student-progress-label">
                 <span>Your course progress</span>
                 <span>{getCourseProgress(currentCourse.course, currentCourse.completed)}%</span>
@@ -91,19 +170,14 @@ export default function Dashboard() {
               >
                 <span style={{ width: `${getCourseProgress(currentCourse.course, currentCourse.completed)}%` }} />
               </div>
-              <Link
-                to={`/app/learn/${nextLesson.id}`}
-                className="btn btn-primary"
-              >
-                Continue learning <span aria-hidden="true">→</span>
+              <Link to={nextAction.to} className="btn btn-primary">
+                {nextAction.label} <span aria-hidden="true">→</span>
               </Link>
             </>
           ) : (
-            <>
-              <h2 id="continue-title">Start your learning journey.</h2>
-              <p>Explore the courses and choose a track for your next edit.</p>
-              <Link to="/courses" className="btn btn-primary">Explore courses <span aria-hidden="true">→</span></Link>
-            </>
+            <Link to={nextAction.to} className="btn btn-primary">
+              {nextAction.label} <span aria-hidden="true">→</span>
+            </Link>
           )}
         </div>
         <div className="student-workspace-art" aria-hidden="true">
@@ -191,14 +265,22 @@ export default function Dashboard() {
       <section className="student-dashboard-next-steps" aria-label="Assignments and instructor feedback">
         <article className="student-next-step-card">
           <span className="eyebrow">ASSIGNMENTS</span>
-          <h2>{pendingReview.length ? `${pendingReview.length} submitted for review` : "Ready for your next submission?"}</h2>
+          <h2>
+            {pendingReview.length
+              ? `${pendingReview.length} submitted for review`
+              : openAssignments.length
+                ? `${openAssignments.length} assignment${openAssignments.length === 1 ? "" : "s"} need attention`
+                : "No assignments need attention"}
+          </h2>
           <p>
             {pendingReview.length
               ? "Your submitted work is waiting for instructor review."
-              : "Your course assignments and submissions are gathered in one place."}
+              : openAssignments.length
+                ? "Open your worklist to review briefs, drafts, or requested revisions."
+                : "New briefs and submission updates will appear in your assignment worklist."}
           </p>
           <Link to="/app/assignments" className="text-link">
-            {pendingReview.length ? "View submissions" : "Go to assignments"} <span aria-hidden="true">↗</span>
+            {pendingReview.length ? "View submissions" : openAssignments.length ? "Open assignments" : "View assignment worklist"} <span aria-hidden="true">↗</span>
           </Link>
         </article>
         <article className="student-next-step-card">
@@ -206,48 +288,42 @@ export default function Dashboard() {
           {feedbackItems.length ? (
             <>
               <h2>{feedbackItems[0].title}</h2>
-              <p className="student-feedback-preview">{feedbackItems[0].feedback}</p>
-              <Link to="/feedback" className="text-link">Read all feedback <span aria-hidden="true">↗</span></Link>
+              <p className="student-feedback-preview">
+                {feedbackItems[0].feedbackHistory?.at(-1)?.comment || feedbackItems[0].feedback}
+              </p>
+              <Link to="/app/feedback" className="text-link">Read all feedback <span aria-hidden="true">↗</span></Link>
             </>
           ) : (
             <>
               <h2>No feedback yet.</h2>
-              <p>Submit a project to start a feedback thread with your instructor.</p>
-              <Link to="/app/assignments" className="text-link">Submit an assignment <span aria-hidden="true">↗</span></Link>
+              <p>Feedback will appear here after your instructor reviews course work.</p>
+              <Link to={openAssignments.length ? "/app/assignments" : "/app/courses"} className="text-link">
+                {openAssignments.length ? "Open assignments" : "Browse course lessons"} <span aria-hidden="true">↗</span>
+              </Link>
             </>
           )}
         </article>
       </section>
 
-      <section className="student-dashboard-bottom-grid">
-        <article className="student-dashboard-info-card">
-          <div className="student-dashboard-section-heading">
-            <div>
-              <span className="eyebrow">UPCOMING</span>
-              <h2>Deadlines</h2>
-            </div>
-          </div>
-          <p>Deadlines are not configured in this learning preview.</p>
-          <Link to="/app/assignments" className="text-link">Check assignments <span aria-hidden="true">↗</span></Link>
-        </article>
+      <section className="student-dashboard-bottom-grid student-dashboard-activity-only">
         <article className="student-dashboard-info-card">
           <div className="student-dashboard-section-heading">
             <div>
               <span className="eyebrow">RECENT ACTIVITY</span>
               <h2>Your latest updates</h2>
             </div>
-            <Link to="/notifications" className="text-link">All updates <span aria-hidden="true">↗</span></Link>
+            <Link to="/app/notifications" className="text-link">All updates <span aria-hidden="true">↗</span></Link>
           </div>
           {activity.length ? (
             <ul className="student-activity-list">
               {activity.map((item) => (
                 <li key={item.id}>
                   <span className="student-activity-dot" aria-hidden="true" />
-                  <div>
+                  <Link to={item.to} className="student-activity-link">
                     <span className="eyebrow">{item.type}{item.date ? ` · ${formatActivityDate(item.date)}` : ""}</span>
                     <strong>{item.title}</strong>
                     <p>{item.detail}</p>
-                  </div>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -258,8 +334,8 @@ export default function Dashboard() {
       </section>
 
       <section className="student-dashboard-quick-links" aria-label="Creative tools">
-        <Link to="/theme-sheet"><span>01</span><strong>Open your Theme Sheet</strong><span aria-hidden="true">↗</span></Link>
-        <Link to="/my-showcase"><span>02</span><strong>Visit My Showcase</strong><span aria-hidden="true">↗</span></Link>
+        <Link to="/app/theme-sheet"><span>01</span><strong>Open your Theme Sheet</strong><span aria-hidden="true">↗</span></Link>
+        <Link to="/app/showcase"><span>02</span><strong>Visit My Showcase</strong><span aria-hidden="true">↗</span></Link>
       </section>
     </div>
   );

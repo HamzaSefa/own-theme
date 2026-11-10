@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import Reveal from "../components/Reveal";
-import { prices, bundlePrice } from "../data/admin";
-import { courses as courseCatalog, isPublicCourse } from "../data/courses";
-import { adminStorageKeys, readAdminData } from "../data/adminWorkspace";
+import { courses as courseCatalog, getPublicCourseData, isPublicCourse } from "../data/courses";
+import { adminStorageKeys, getAdminPlans, isAvailableBundle, readAdminData } from "../data/adminWorkspace";
 import { faq } from "../data/details";
 
 const courseArtwork = {
@@ -50,16 +49,24 @@ const editDecisions = [
 
 export default function Home() {
   const [reelNote, setReelNote] = useState(false);
-  const courses = courseCatalog.filter(isPublicCourse).map((course, index) => ({
-    ...course,
-    slug: course.slug || course.id,
-    tag: course.tag || `COURSE ${String(index + 1).padStart(2, "0")}`,
-    desc: course.description || course.desc || "Build a style of your own with practical, project-based editing lessons.",
-    visual: courseArtwork[course.id] || "OWN THE FRAME",
-    lessonCount: course.modules.reduce((total, module) => total + module.lessons.length, 0),
+  const courses = courseCatalog.filter(isPublicCourse).map((item, index) => ({
+    ...getPublicCourseData(item),
+    slug: item.slug || item.id,
+    tag: item.tag || `COURSE ${String(index + 1).padStart(2, "0")}`,
+    desc: item.description || item.desc || "Build a style of your own with practical, project-based editing lessons.",
+    visual: courseArtwork[item.id] || "OWN THE FRAME",
+    lessonCount: item.modules.reduce((total, module) => total + module.lessons.length, 0),
+    thumbnail: item.thumbnail,
   }));
   const siteSettings = readAdminData(adminStorageKeys.settings, {});
-  const plans = readAdminData(adminStorageKeys.plans, { membershipStatus: "Coming soon", membershipPrice: "" });
+  const plans = getAdminPlans();
+  const featuredOrder = siteSettings.featuredCourseIds || [];
+  courses.sort((a, b) => {
+    const aIndex = featuredOrder.indexOf(a.id);
+    const bIndex = featuredOrder.indexOf(b.id);
+    return (aIndex < 0 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex < 0 ? Number.MAX_SAFE_INTEGER : bIndex);
+  });
+  const featuredBundle = plans.bundles.find((bundle) => isAvailableBundle(bundle, courses.map((course) => course.id)));
   const selectedShowcase = [
     ...readAdminData(adminStorageKeys.assignments, []).filter(
       (item) => item.showcasePublished && item.showcaseConsent && /^https?:\/\//i.test(item.url || ""),
@@ -71,18 +78,10 @@ export default function Home() {
   const headline = siteSettings.homeHeadline || "You don't have to follow a theme. Build one.";
   const highlightedPhrase = "Build one.";
   const highlightIndex = headline.indexOf(highlightedPhrase);
-  const allCoursePricesSet = courses.every((course) =>
-    (course.price !== "" && course.price != null) || prices[course.id] != null
-  );
-  const total = courses.reduce((sum, course) => sum + Number(
-    course.price !== "" && course.price != null ? course.price : prices[course.id] ?? 0
-  ), 0);
-  const saving = allCoursePricesSet ? total - bundlePrice : 0;
-  const completeBundleAvailable = courseCatalog.length === 3
-    && courses.length === 3
-    && courses.every((course) => course.purchaseOption !== "Subscription included");
   const membershipAvailable = plans.membershipStatus === "Available"
+    && plans.membershipPublicationStatus === "Published"
     && Boolean(plans.membershipPrice?.trim())
+    && Boolean(plans.membershipCurrency?.trim())
     && Boolean(plans.membershipBillingCycle?.trim())
     && Boolean(plans.membershipAccess?.trim())
     && Boolean(plans.membershipRenewalTerms?.trim());
@@ -289,17 +288,17 @@ export default function Home() {
               <p>Choose an individual course. Access duration and terms are listed with each course when confirmed.</p>
               <Link to="/courses" className="text-link">Browse individual courses <span aria-hidden="true">↗</span></Link>
             </article>
-            {completeBundleAvailable && <article className="pricing-preview-card bundle-preview">
+            {featuredBundle && <article className="pricing-preview-card bundle-preview">
               <span className="eyebrow">BEST VALUE · ONE-TIME</span>
-              <h3>The complete bundle.</h3>
-              <p>All three courses, one payment.{saving > 0 ? ` Save $${saving} compared with buying them individually.` : ""}</p>
-              <div className="bundle-preview-bottom"><strong>${bundlePrice}<small> one-time</small></strong><Link to="/checkout/bundle" className="btn btn-primary">Get the bundle <span aria-hidden="true">↗</span></Link></div>
+              <h3>{featuredBundle.title}</h3>
+              <p>{featuredBundle.description || "A one-time purchase of the courses included in this bundle."}</p>
+              <div className="bundle-preview-bottom"><strong>{featuredBundle.currency || "USD"} {featuredBundle.price}<small> one-time</small></strong><Link to={`/checkout/bundle?bundle=${encodeURIComponent(featuredBundle.id)}`} className="btn btn-primary">Get the bundle <span aria-hidden="true">↗</span></Link></div>
             </article>}
             <article className="pricing-preview-card membership-preview">
               <span className="eyebrow">MEMBERSHIP</span>
               <h3>Keep learning, together.</h3>
               <p>{membershipAvailable
-                ? `Membership offer: ${plans.membershipPrice} ${plans.membershipBillingCycle}. Access: ${plans.membershipAccess}. Renewal: ${plans.membershipRenewalTerms}. Subscription checkout is not yet available.`
+                ? `Membership offer: ${plans.membershipCurrency} ${plans.membershipPrice} ${plans.membershipBillingCycle}. Access: ${plans.membershipAccess}. Renewal: ${plans.membershipRenewalTerms}. Subscription checkout is not yet available.`
                 : plans.membershipStatus === "Paused"
                   ? "Membership enrollment is paused while we shape the ongoing learning offer."
                   : "Membership is in development. We'll share the format and price when they're confirmed."}</p>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { enrollInFreeCourse, setCurrentUser } from "../data/studentPortal";
+import { enrollInFreeCourse, getInternalReturnPath, setCurrentUser } from "../data/studentPortal";
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -11,9 +11,9 @@ export default function Signup() {
 
   function handleSubmit(e) {
     e.preventDefault();
-    const user = { name: name.trim(), email: email.trim() };
+    const user = { name: name.trim(), email: email.trim(), role: "student" };
     setCurrentUser(user);
-    const destination = location.state?.from || "/app";
+    const destination = getInternalReturnPath(location.state?.from);
     if (destination.startsWith("/free-course/lesson/")) enrollInFreeCourse(user.email);
     navigate(destination, { replace: true });
   }
@@ -22,7 +22,7 @@ export default function Signup() {
     <div className="auth-wrap">
       <form className="auth-card" onSubmit={handleSubmit}>
         <h1>Create your account</h1>
-        <p className="sub">Start with the free Voice mini-course. This preview stores your profile in this browser.</p>
+        <p className="sub">Create a local preview profile to explore the learning space. This form does not create a real account or save your password.</p>
 
         <div className="field">
           <label>Full name</label>

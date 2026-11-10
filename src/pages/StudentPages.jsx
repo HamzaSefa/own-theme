@@ -1,17 +1,20 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
-import { courses, getAllLessons, getProgress, student } from "../data/courses";
+import { courses, getAllLessons, getProgress, getCurrentEnrollments } from "../data/courses";
 import { adminStorageKeys, readAdminData } from "../data/adminWorkspace";
 import { details } from "../data/details";
+import { SuccessMessage, ValidationError } from "../components/States";
 import {
   getCurrentUser,
+  getUserStorageKey,
+  getUserSubmissions,
   readStudentData,
   saveStudentData,
+  saveUserSubmissions,
   setCurrentUser,
   signOut,
 } from "../data/studentPortal";
 
-const ASSIGNMENTS_KEY = "ownTheme_assignments";
 const THEME_SHEET_KEY = "ownTheme_themeSheet";
 const NOTIFICATIONS_KEY = "ownTheme_notifications";
 const NOTIFICATION_PREFERENCES_KEY = "ownTheme_notification_preferences";
@@ -73,6 +76,10 @@ export function StudentRoute({ children, classroom = false }) {
     );
   }
 
+  if (user.role && user.role !== "student") {
+    return <Navigate to={user.role === "admin" ? "/admin" : "/"} replace />;
+  }
+
   if (classroom) return children;
 
   return <StudentLayout key={location.pathname}>{children}</StudentLayout>;
@@ -97,7 +104,7 @@ function StudentLayout({ children }) {
         <main className="student-main">{children}</main>
       </div>
       <p className="student-demo-note">
-        Student preview · Account and learning data are stored in this browser.
+        Student preview · Data is stored in this browser. Client-side access checks are not security; avoid real or sensitive data.
       </p>
     </div>
   );
@@ -195,7 +202,7 @@ function PageHeading({ eyebrow = "YOUR LEARNING SPACE", title, description, acti
 }
 
 function ownedCourses() {
-  return student.enrolled
+  return getCurrentEnrollments()
     .map((enrollment) => ({
       enrollment,
       course: courses.find((course) => course.id === enrollment.courseId),
@@ -224,7 +231,7 @@ function findSubmissionHistory(submissions, assignment) {
 }
 
 function getThemeSheets() {
-  const saved = readStudentData(THEME_SHEET_KEY, []);
+  const saved = readStudentData(getUserStorageKey(THEME_SHEET_KEY), []);
   if (Array.isArray(saved)) return saved;
   if (saved && typeof saved === "object" && Object.keys(saved).length) {
     return [{ id: "theme-sheet-default", title: "My Theme Sheet", values: saved, updatedAt: "" }];
@@ -286,7 +293,7 @@ function getNotificationPreferenceKey(type) {
 function addStudentNotification(notification) {
   const preferences = {
     ...DEFAULT_NOTIFICATION_PREFERENCES,
-    ...readStudentData(NOTIFICATION_PREFERENCES_KEY, {}),
+    ...readStudentData(getUserStorageKey(NOTIFICATION_PREFERENCES_KEY), {}),
   };
   const preference = getNotificationPreferenceKey(notification.type);
   if (preference && !preferences[preference]) return;
@@ -460,7 +467,7 @@ export function MyCoursesPage() {
 export function CurriculumPage() {
   const { courseId } = useParams();
   const course = courses.find((item) => item.id === courseId);
-  const enrollment = student.enrolled.find((item) => item.courseId === courseId);
+  const enrollment = getCurrentEnrollments().find((item) => item.courseId === courseId);
 
   if (!course) return <Navigate to="/app/courses" replace />;
   if (!enrollment) return <Navigate to="/app/courses" replace />;
@@ -477,11 +484,11 @@ export function CurriculumPage() {
     ? course.modules.findIndex((module) => module.lessons.some((lesson) => lesson.id === currentLesson.id))
     : -1;
   const progress = lessons.length ? getProgress(course, completed) : 0;
-  const courseSubmissions = readStudentData(ASSIGNMENTS_KEY, [])
+  const courseSubmissions = getUserSubmissions()
     .filter((assignment) => assignment.courseId === course.id);
   const moduleResources = course.modules.flatMap((module) =>
     module.lessons
-      .filter((lesson) => lesson.resourceUrl)
+      .filter((lesson) => lesson.resourceUrl && lesson.locked !== true)
       .map((lesson) => ({ module: module.title, lesson: lesson.title, url: lesson.resourceUrl }))
   );
   const courseSummary = details[course.id]?.promise
@@ -672,14 +679,7 @@ export function CurriculumPage() {
 
 export function AssignmentsPage() {
   const owned = ownedCourses();
-  const submissions = readStudentData(ASSIGNMENTS_KEY, []);
-  const [courseId, setCourseId] = useState(owned[0]?.course.id || "");
-  const [title, setTitle] = useState("");
-  const [url, setUrl] = useState("");
-  const [notes, setNotes] = useState("");
-  const [showcaseConsent, setShowcaseConsent] = useState(false);
-  const [message, setMessage] = useState("");
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
+  const submissions = getUserSubmissions();
   const [statusFilter, setStatusFilter] = useState("To Do");
   const configuredAssignments = getConfiguredAssignments(owned);
   const configuredSubmissionIds = new Set();
@@ -716,53 +716,6 @@ export function AssignmentsPage() {
   const allAssignmentItems = [...assignmentItems, ...unlinkedSubmissions];
   const filterOptions = ["To Do", "Draft", "Submitted", "Under Review", "Revision Requested", "Completed"];
   const filteredAssignments = allAssignmentItems.filter((item) => item.status === statusFilter);
-  const selectedAssignment = configuredAssignments.find((item) => item.id === selectedAssignmentId);
-
-  function submitAssignment(event) {
-    event.preventDefault();
-    const submissionId = createLocalRecordId();
-    const updated = [
-      {
-        id: submissionId,
-        courseId,
-        assignmentId: selectedAssignment?.id || "",
-        lessonId: selectedAssignment?.lessonId || selectedAssignment?.moduleLessons[0]?.id || "",
-        studentEmail: getCurrentUser()?.email || "",
-        title: title.trim(),
-        url: url.trim(),
-        notes: notes.trim(),
-        showcaseConsent,
-        showcasePublished: false,
-        submittedAt: new Date().toISOString(),
-        status: "Submitted",
-      },
-      ...submissions,
-    ];
-    saveStudentData(ASSIGNMENTS_KEY, updated);
-    addStudentNotification({
-      title: "Assignment submitted",
-      message: `${title.trim()} is saved and awaiting instructor review.`,
-      type: "assignment_status",
-      href: `/app/assignments/${selectedAssignment?.id || submissionId}`,
-    });
-    setTitle("");
-    setUrl("");
-    setNotes("");
-    setShowcaseConsent(false);
-    setSelectedAssignmentId("");
-    setMessage("Assignment saved in this browser preview. Instructor submission sync is not connected.");
-    window.dispatchEvent(new Event("ownTheme:student-data"));
-  }
-
-  function startAssignment(assignment) {
-    setSelectedAssignmentId(assignment.id);
-    setCourseId(assignment.courseId);
-    setTitle(assignment.title);
-    setMessage("");
-    window.requestAnimationFrame(() => {
-      document.getElementById("assignment-submission-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  }
 
   return (
     <div className="student-assignments-page">
@@ -777,7 +730,7 @@ export function AssignmentsPage() {
           <p>
             {allAssignmentItems.length
               ? "Start an available brief or follow up on work you have already submitted."
-              : "Assignment briefs and due dates have not been configured for your enrolled courses yet. You can still submit a project for feedback."}
+              : "Assignment briefs have not been added to your enrolled courses yet. Check your course curriculum for lessons and updates."}
           </p>
         </div>
         <div className="student-assignment-counts" aria-label="Assignment totals">
@@ -790,7 +743,7 @@ export function AssignmentsPage() {
       <section className="student-assignment-worklist">
         <header className="student-assignment-list-heading">
           <div><span className="eyebrow">ASSIGNMENT WORKLIST</span><h2>What needs your attention?</h2></div>
-          {owned.length > 0 && <a className="text-link" href="#assignment-submission-form">Submit a project <span aria-hidden="true">↓</span></a>}
+          {owned.length > 0 && <Link className="text-link" to="/app/courses">Browse course curriculum <span aria-hidden="true">↗</span></Link>}
         </header>
         <div className="student-assignment-filters" role="group" aria-label="Filter assignments">
           {filterOptions.map((status) => (
@@ -806,6 +759,15 @@ export function AssignmentsPage() {
               const relatedLesson = item.lessonId
                 ? courses.find((course) => course.id === item.courseId)?.modules.flatMap((module) => module.lessons || []).find((lesson) => lesson.id === item.lessonId)
                 : item.moduleLessons?.[0];
+              const actionLabel = {
+                "To Do": "Action required: submit your work.",
+                Draft: "Your draft is saved and ready to finish.",
+                Submitted: "Your submission is waiting for instructor review.",
+                "Under Review": "Your instructor is reviewing this work.",
+                "Revision Requested": "Action required: revise and resubmit.",
+                Completed: "This assignment is complete.",
+              }[status];
+              const hasFeedback = item.submission?.feedback || item.submission?.feedbackHistory?.length;
               return (
                 <article className="student-assignment-card" key={`${item.courseId}-${item.id}`}>
                   <Link className="student-assignment-card-main" to={`/app/assignments/${item.id}`}>
@@ -820,13 +782,14 @@ export function AssignmentsPage() {
                   {item.submission?.feedback && <div className="student-assignment-feedback"><strong>Instructor feedback</strong><p>{item.submission.feedback}</p></div>}
                   <div className="student-assignment-card-footer">
                     <span className="student-assignment-action">
-                      {status === "To Do" ? "Action required: submit your work." : status === "Revision Requested" ? "Action required: revise and resubmit." : status === "Submitted" ? "Your submission is awaiting review." : "This assignment is complete."}
+                      {actionLabel}
                     </span>
                     <div className="student-assignment-card-links">
                       {relatedLesson && <Link to={`/app/learn/${relatedLesson.id}`}>Related lesson ↗</Link>}
                       {item.submission?.url && <a href={item.submission.url} target="_blank" rel="noreferrer">Open submission ↗</a>}
-                      {status === "To Do" && <button type="button" onClick={() => startAssignment(item)}>Start assignment →</button>}
-                      {item.submission?.feedback && <Link to={`/app/feedback/${item.submission.id}`}>Read feedback ↗</Link>}
+                      {status === "To Do" && <Link to={`/app/assignments/${item.id}`}>Open brief and submit →</Link>}
+                      {(status === "Draft" || status === "Revision Requested") && <Link to={`/app/assignments/${item.id}`}>{status === "Draft" ? "Continue draft →" : "Revise and resubmit →"}</Link>}
+                      {hasFeedback && <Link to={`/app/feedback/${item.submission.id}`}>Read feedback ↗</Link>}
                     </div>
                   </div>
                 </article>
@@ -837,45 +800,15 @@ export function AssignmentsPage() {
           <div className="student-course-empty">
             <span className="student-empty-mark" aria-hidden="true">✓</span>
             <h2>{statusFilter === "To Do" ? "No assignments to do." : `No ${statusFilter.toLowerCase()} assignments.`}</h2>
-            <p>{statusFilter === "To Do" ? "No assignment briefs are configured right now. You can submit independent course work below." : "Assignments in this status will appear here when available."}</p>
+            <p>{statusFilter === "To Do" ? "New assignment briefs will appear here when they are added to your courses." : "Assignments in this status will appear here when available."}</p>
           </div>
         )}
       </section>
 
-      {owned.length ? (
-        <form id="assignment-submission-form" className="student-form-panel student-assignment-submit-form" onSubmit={submitAssignment}>
-          <span className="eyebrow">PROJECT SUBMISSION</span>
-          <h2>{selectedAssignment ? `Submit: ${selectedAssignment.title}` : "Submit a project for feedback"}</h2>
-          {selectedAssignment?.instructions && <p className="student-assignment-instructions">{selectedAssignment.instructions}</p>}
-          <div className="field">
-            <label htmlFor="assignment-course">Course</label>
-            <select id="assignment-course" className="select" value={courseId} onChange={(e) => { setCourseId(e.target.value); setSelectedAssignmentId(""); }}>
-              {owned.map(({ course }) => <option value={course.id} key={course.id}>{course.title}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="assignment-title">Project or assignment name</label>
-            <input id="assignment-title" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. One-minute city portrait" />
-          </div>
-          <div className="field">
-            <label htmlFor="assignment-url">Project link</label>
-            <input id="assignment-url" type="url" required value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" />
-          </div>
-          <div className="field">
-            <label htmlFor="assignment-notes">What choices are you exploring?</label>
-            <textarea id="assignment-notes" rows="4" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Tell your instructor what you want feedback on." />
-          </div>
-          <label className="consent-check">
-            <input type="checkbox" checked={showcaseConsent} onChange={(e) => setShowcaseConsent(e.target.checked)} />
-            <span>I give permission for this project to be considered for the public Own Theme showcase. An instructor must still approve it.</span>
-          </label>
-          <button className="btn btn-primary" type="submit">Save submission</button>
-          {message && <p className="form-success" role="status">{message}</p>}
-        </form>
-      ) : (
-        <EmptyState title="Enroll to submit an assignment." text="Your assignments will be connected to the courses you have access to." to="/courses" label="Explore courses" />
+      {!owned.length && (
+        <EmptyState title="Enroll to see course assignments." text="Assignments are tied to the courses in your learning library." to="/courses" label="Explore courses" />
       )}
-      <p className="student-demo-callout">Submissions in this preview are saved in this browser. Instructor review, due dates, and backend submission sync are not connected.</p>
+      <p className="student-demo-callout">Assignment drafts and submissions are stored in this browser preview. Instructor review and backend sync are not connected.</p>
     </div>
   );
 }
@@ -883,7 +816,7 @@ export function AssignmentsPage() {
 export function AssignmentDetailPage() {
   const { assignmentId } = useParams();
   const owned = ownedCourses();
-  const submissions = readStudentData(ASSIGNMENTS_KEY, []);
+  const [submissions, setSubmissions] = useState(getUserSubmissions);
   const configured = getConfiguredAssignments(owned).find((item) => item.id === assignmentId);
   const directSubmission = submissions.find((item) =>
     item.id === assignmentId || item.assignmentId === assignmentId
@@ -911,6 +844,7 @@ export function AssignmentDetailPage() {
   const [notes, setNotes] = useState(latest?.notes || "");
   const [themeSheetId, setThemeSheetId] = useState(latest?.themeSheetId || "");
   const [message, setMessage] = useState("");
+  const [messageIsError, setMessageIsError] = useState(false);
 
   if (!assignment || !course || !owned.some((item) => item.course.id === course.id)) {
     return <Navigate to="/app/assignments" replace />;
@@ -929,12 +863,14 @@ export function AssignmentDetailPage() {
   const deliverables = Array.isArray(assignment.deliverables)
     ? assignment.deliverables
     : [];
-  const canSubmit = status !== "Completed";
+  const canSubmit = ["To Do", "Draft", "Revision Requested"].includes(status);
 
   function saveSubmission(nextStatus) {
     const now = new Date().toISOString();
+    const submissionId = latest?.status === "Draft" ? latest.id : createLocalRecordId();
+    const submittedAttempt = history.filter((item) => getAssignmentStatus(item.status) !== "Draft").length + 1;
     const submission = {
-      id: createLocalRecordId(),
+      id: submissionId,
       assignmentId: assignment.id,
       courseId: course.id,
       lessonId: assignment.lessonId || relatedLessons[0]?.id || "",
@@ -945,15 +881,17 @@ export function AssignmentDetailPage() {
       themeSheetId,
       themeSheetSnapshot: themeSheets.find((sheet) => sheet.id === themeSheetId) || null,
       status: nextStatus,
-      revision: history.length + 1,
-      previousSubmissionId: latest?.id || "",
+      revision: submittedAttempt,
+      previousSubmissionId: latest?.status === "Draft" ? latest.previousSubmissionId || "" : latest?.id || "",
       submittedAt: nextStatus === "Draft" ? "" : now,
       updatedAt: now,
       showcaseConsent: latest?.showcaseConsent || false,
       showcasePublished: false,
       feedbackHistory: [],
     };
-    saveStudentData(ASSIGNMENTS_KEY, [submission, ...submissions]);
+    const updatedSubmissions = [submission, ...submissions.filter((item) => item.id !== submission.id)];
+    saveUserSubmissions(updatedSubmissions);
+    setSubmissions(updatedSubmissions);
     if (nextStatus !== "Draft") {
       addStudentNotification({
         title: latest ? "Assignment resubmitted" : "Assignment submitted",
@@ -965,6 +903,7 @@ export function AssignmentDetailPage() {
     setMessage(nextStatus === "Draft"
       ? "Draft saved in this browser preview."
       : "Submission saved in this browser preview. Instructor submission sync is not connected.");
+    setMessageIsError(false);
     window.dispatchEvent(new Event("ownTheme:student-data"));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -973,6 +912,7 @@ export function AssignmentDetailPage() {
     event.preventDefault();
     if (!url.trim()) {
       setMessage("Add a video or project link before submitting.");
+      setMessageIsError(true);
       return;
     }
     saveSubmission("Submitted");
@@ -1070,22 +1010,25 @@ export function AssignmentDetailPage() {
         <aside className="student-assignment-submit-aside">
           <form className="student-assignment-detail-card student-assignment-detail-form" onSubmit={handleSubmit}>
             <span className="eyebrow">{status === "Revision Requested" ? "RESUBMISSION" : "YOUR WORK"}</span>
-            <h2>{status === "Revision Requested" ? "Revise and resubmit" : latest ? "Update your submission" : "Submit your work"}</h2>
+            <h2>{status === "Revision Requested" ? "Revise and resubmit" : latest ? "Your submission" : "Submit your work"}</h2>
+            {status === "Submitted" || status === "Under Review" ? (
+              <p className="student-assignment-policy-note">Your submission is with your instructor. You can make changes after a revision is requested.</p>
+            ) : null}
             {status === "Revision Requested" && latest?.revisionRequirements && (
               <p className="student-revision-requirements">{latest.revisionRequirements}</p>
             )}
             <label className="field">
               <span>Video or project link</span>
-              <input type="url" required={canSubmit} value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://…" />
+              <input type="url" required={canSubmit} disabled={!canSubmit} value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://…" />
             </label>
             <p className="student-upload-note">File upload is not available in this preview. Share a link to a permitted hosted video or project.</p>
             <label className="field">
               <span>Optional notes for your instructor</span>
-              <textarea rows="4" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="What should your instructor focus on?" />
+              <textarea rows="4" disabled={!canSubmit} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="What should your instructor focus on?" />
             </label>
             <label className="field">
               <span>Attach a Theme Sheet</span>
-              <select value={themeSheetId} onChange={(event) => setThemeSheetId(event.target.value)}>
+              <select disabled={!canSubmit} value={themeSheetId} onChange={(event) => setThemeSheetId(event.target.value)}>
                 <option value="">No Theme Sheet attached</option>
                 {themeSheets.map((sheet) => <option value={sheet.id} key={sheet.id}>{sheet.title || "Untitled Theme Sheet"}</option>)}
               </select>
@@ -1096,11 +1039,16 @@ export function AssignmentDetailPage() {
             {canSubmit && (
               <div className="student-assignment-detail-actions">
                 <button type="button" className="btn btn-outline" onClick={() => saveSubmission("Draft")}>Save draft</button>
-                <button type="submit" className="btn btn-primary">{latest ? "Resubmit work" : "Submit assignment"}</button>
+                <button type="submit" className="btn btn-primary">
+                  {status === "Revision Requested" ? "Submit revision" : "Submit assignment"}
+                </button>
               </div>
             )}
+            {status === "Draft" && <p className="student-assignment-policy-note">Your draft is private until you submit it for review.</p>}
             {status === "Completed" && <p className="student-assignment-policy-note">This assignment is marked completed. Contact your instructor if you need to submit another version.</p>}
-            {message && <p className="form-success" role="status">{message}</p>}
+            {messageIsError
+              ? <ValidationError>{message}</ValidationError>
+              : <SuccessMessage>{message}</SuccessMessage>}
             <p className="student-demo-callout">Submissions and drafts are stored in this browser preview only.</p>
           </form>
         </aside>
@@ -1133,7 +1081,7 @@ export function ThemeSheetPage() {
     };
     const updated = [sheet, ...sheets];
     setSheets(updated);
-    saveStudentData(THEME_SHEET_KEY, updated);
+    saveStudentData(getUserStorageKey(THEME_SHEET_KEY), updated);
     setSelectedId(sheet.id);
     setValues(sheet.values);
     setTitle(sheet.title);
@@ -1151,7 +1099,7 @@ export function ThemeSheetPage() {
     const updated = [sheet, ...sheets.filter((item) => item.id !== sheet.id)];
     setSheets(updated);
     setSelectedId(sheet.id);
-    saveStudentData(THEME_SHEET_KEY, updated);
+    saveStudentData(getUserStorageKey(THEME_SHEET_KEY), updated);
     setMessage("Theme Sheet draft saved in this browser.");
   }
 
@@ -1209,7 +1157,7 @@ export function ThemeSheetPage() {
             <button className="btn btn-primary" type="submit">Save draft</button>
           </div>
         </div>
-        {message && <p className="form-success" role="status">{message}</p>}
+        <SuccessMessage>{message}</SuccessMessage>
       </form>
       <p className="student-demo-callout">Theme Sheets are saved in this browser. Attach a saved sheet when submitting an assignment.</p>
     </div>
@@ -1218,7 +1166,7 @@ export function ThemeSheetPage() {
 
 export function FeedbackPage() {
   const { submissionId } = useParams();
-  const submissions = readStudentData(ASSIGNMENTS_KEY, []);
+  const submissions = getUserSubmissions();
   const feedbackSubmissions = submissions.filter((item) =>
     item.feedback
     || item.feedbackHistory?.length
@@ -1287,10 +1235,10 @@ function FeedbackDetail({ submission }) {
   const [message, setMessage] = useState("");
 
   function markReviewed() {
-    const updated = readStudentData(ASSIGNMENTS_KEY, []).map((item) => item.id === submission.id
+    const updated = getUserSubmissions().map((item) => item.id === submission.id
       ? { ...item, reviewedByStudentAt: new Date().toISOString() }
       : item);
-    saveStudentData(ASSIGNMENTS_KEY, updated);
+    saveUserSubmissions(updated);
     setReviewed(true);
     setMessage("Marked as reviewed in this browser.");
   }
@@ -1311,7 +1259,7 @@ function FeedbackDetail({ submission }) {
           )}
           {!reviewed && <button className="btn btn-outline" type="button" onClick={markReviewed}>Mark as reviewed</button>}
         </div>
-        {message && <p className="form-success" role="status">{message}</p>}
+        <SuccessMessage>{message}</SuccessMessage>
       </section>
       <section className="student-assignment-detail-card">
         <span className="eyebrow">FEEDBACK THREAD</span>
@@ -1333,10 +1281,7 @@ function FeedbackDetail({ submission }) {
 }
 
 export function MyShowcasePage() {
-  const currentEmail = getCurrentUser()?.email?.toLowerCase();
-  const submissions = readStudentData(ASSIGNMENTS_KEY, []).filter((item) =>
-    !item.studentEmail || item.studentEmail.toLowerCase() === currentEmail
-  );
+  const submissions = getUserSubmissions();
   const [projects, setProjects] = useState(getOwnShowcaseProjects);
   const [assignments, setAssignments] = useState(submissions);
   const [editingId, setEditingId] = useState("");
@@ -1348,6 +1293,7 @@ export function MyShowcasePage() {
   const [visibility, setVisibility] = useState("private");
   const [consent, setConsent] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageIsError, setMessageIsError] = useState(false);
   const owned = ownedCourses();
   const assignmentOptions = getConfiguredAssignments(owned);
   const linkedSubmissions = assignments.filter((item) =>
@@ -1363,7 +1309,10 @@ export function MyShowcasePage() {
     setAssignmentId("");
     setVisibility("private");
     setConsent(false);
-    if (clearMessage) setMessage("");
+    if (clearMessage) {
+      setMessage("");
+      setMessageIsError(false);
+    }
   }
 
   function editProject(project) {
@@ -1376,6 +1325,7 @@ export function MyShowcasePage() {
     setVisibility(project.showcaseConsent ? "public" : "private");
     setConsent(Boolean(project.showcaseConsent));
     setMessage("");
+    setMessageIsError(false);
     document.getElementById("showcase-project-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -1384,10 +1334,12 @@ export function MyShowcasePage() {
     const url = mediaUrl.trim();
     if (!/^https?:\/\//i.test(url)) {
       setMessage("Enter a valid http or https media link.");
+      setMessageIsError(true);
       return;
     }
     if (visibility === "public" && !consent) {
       setMessage("To request public display, confirm your consent. Otherwise, keep this project private.");
+      setMessageIsError(true);
       return;
     }
     const selectedAssignment = assignmentOptions.find((item) => item.id === assignmentId);
@@ -1419,6 +1371,7 @@ export function MyShowcasePage() {
         : "Project saved privately.";
     resetForm(false);
     setMessage(savedMessage);
+    setMessageIsError(false);
     window.dispatchEvent(new Event("ownTheme:student-data"));
   }
 
@@ -1434,14 +1387,15 @@ export function MyShowcasePage() {
     const updated = assignments.map((record) => record.id === item.id
       ? { ...record, showcaseConsent: isPublic, showcasePublished: false }
       : record);
-    const allSubmissions = readStudentData(ASSIGNMENTS_KEY, []);
-    saveStudentData(ASSIGNMENTS_KEY, allSubmissions.map((record) => record.id === item.id
+    const allSubmissions = getUserSubmissions();
+    saveUserSubmissions(allSubmissions.map((record) => record.id === item.id
       ? { ...record, showcaseConsent: isPublic, showcasePublished: false }
       : record));
     setAssignments(updated);
     setMessage(isPublic
       ? "Consent saved. Instructor approval is still required before public display."
       : "This project is now private and removed from the public showcase.");
+    setMessageIsError(false);
     window.dispatchEvent(new Event("ownTheme:student-data"));
   }
 
@@ -1534,7 +1488,9 @@ export function MyShowcasePage() {
           <button className="btn btn-primary" type="submit">{editingId ? "Save changes" : "Save project"}</button>
           {editingId && <button className="btn btn-outline" type="button" onClick={resetForm}>Cancel edit</button>}
         </div>
-        {message && <p className="form-success" role="status">{message}</p>}
+        {messageIsError
+          ? <ValidationError>{message}</ValidationError>
+          : <SuccessMessage>{message}</SuccessMessage>}
         <p className="student-demo-callout">Projects are stored in this browser preview. Public publication is blocked until student consent and instructor approval are both recorded.</p>
       </form>
     </div>
@@ -1545,11 +1501,11 @@ export function NotificationsPage() {
   const currentUser = getCurrentUser();
   const preferences = {
     ...DEFAULT_NOTIFICATION_PREFERENCES,
-    ...readStudentData(NOTIFICATION_PREFERENCES_KEY, {}),
+    ...readStudentData(getUserStorageKey(NOTIFICATION_PREFERENCES_KEY), {}),
   };
   const [notifications, setNotifications] = useState(() =>
     readStudentData(NOTIFICATIONS_KEY, []).filter((item) =>
-      !item.recipientEmail || item.recipientEmail.toLowerCase() === currentUser?.email?.toLowerCase()
+      item.recipientEmail?.toLowerCase() === currentUser?.email?.toLowerCase()
     ).filter((item) => {
       const preference = getNotificationPreferenceKey(item.type);
       return !preference || preferences[preference];
@@ -1618,7 +1574,7 @@ export function ProfilePage() {
   const [name, setName] = useState(currentUser.name || "");
   const [preferences, setPreferences] = useState(() => ({
     ...DEFAULT_NOTIFICATION_PREFERENCES,
-    ...readStudentData(NOTIFICATION_PREFERENCES_KEY, {}),
+    ...readStudentData(getUserStorageKey(NOTIFICATION_PREFERENCES_KEY), {}),
   }));
   const [message, setMessage] = useState("");
   const navigate = useNavigate();
@@ -1635,7 +1591,7 @@ export function ProfilePage() {
   function updateNotificationPreference(key, enabled) {
     const updated = { ...preferences, [key]: enabled };
     setPreferences(updated);
-    saveStudentData(NOTIFICATION_PREFERENCES_KEY, updated);
+    saveStudentData(getUserStorageKey(NOTIFICATION_PREFERENCES_KEY), updated);
     setMessage("Notification preferences saved in this browser preview.");
   }
 
@@ -1664,7 +1620,7 @@ export function ProfilePage() {
           <small>Email changes and verification require the account service, which is not connected.</small>
         </div>
         <button className="btn btn-primary" type="submit">Save profile</button>
-        {message && <p className="form-success" role="status">{message}</p>}
+        <SuccessMessage>{message}</SuccessMessage>
         <div className="student-profile-image-note">
           <span className="student-profile-avatar" aria-hidden="true">{name.trim().charAt(0).toUpperCase() || "S"}</span>
           <p>Profile image upload is not supported in this preview.</p>

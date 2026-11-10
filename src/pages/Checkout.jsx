@@ -1,25 +1,42 @@
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { courses, isPublicCourse } from "../data/courses";
-import { bundlePrice, prices } from "../data/admin";
+import { prices } from "../data/admin";
+import { getAdminPlans, isAvailableBundle } from "../data/adminWorkspace";
 
 export default function Checkout() {
   const { courseId } = useParams();
-  const isBundle = courseId === "bundle";
+  const [searchParams] = useSearchParams();
+  const selectedBundleId = searchParams.get("bundle");
+  const plans = getAdminPlans();
+  const isBundle = courseId === "bundle" || Boolean(selectedBundleId);
+  const bundle = isBundle
+    ? plans.bundles.find((item) => item.id === (selectedBundleId || plans.bundles[0]?.id))
+    : null;
   const course = isBundle
-    ? { id: "bundle", title: "Complete Bundle" }
+    ? { id: "bundle", title: bundle?.title || "Bundle" }
     : courses.find((item) => item.id === courseId && isPublicCourse(item));
-
-  if (courseId && !course) return <Navigate to="/courses" replace />;
   const publicCourses = courses.filter(isPublicCourse);
-  if (isBundle && (courses.length !== 3 || publicCourses.length !== 3)) return <Navigate to="/plans" replace />;
+  const bundleCourses = bundle
+    ? publicCourses.filter((item) => (bundle.includedCourses || []).includes(item.id))
+    : [];
+  const publicCourseIds = publicCourses.map((item) => item.id);
+  const bundleIsAvailable = Boolean(bundle) && isAvailableBundle(bundle, publicCourseIds);
+
+  if (isBundle && !bundleIsAvailable) return <Navigate to="/plans" replace />;
+  if (courseId && !isBundle && !course) return <Navigate to="/courses" replace />;
   if (course?.purchaseOption === "Subscription included") return <Navigate to="/plans" replace />;
+
   if (!courseId) {
+    const publicCourseIds = publicCourses.map((item) => item.id);
+    const availableBundles = plans.bundles.filter((item) =>
+      isAvailableBundle(item, publicCourseIds)
+    );
     return (
       <main className="container public-page account-support-page">
         <header className="public-page-intro">
           <span className="eyebrow">CHECKOUT</span>
           <h1>Choose what you want to review.</h1>
-          <p>Review an individual one-time course purchase or the complete one-time bundle. Payment processing is unavailable in this preview.</p>
+          <p>Review an individual one-time course purchase or a published bundle. Payment processing is unavailable in this preview.</p>
         </header>
         <div className="plans-individual-grid">
           {publicCourses.map((item) => (
@@ -30,23 +47,26 @@ export default function Checkout() {
               <Link to={`/checkout/${item.id}`} className="text-link">Review course <span aria-hidden="true">↗</span></Link>
             </article>
           ))}
-          <article className="plans-course-card">
-            <span className="eyebrow">COMPLETE BUNDLE</span>
-            <h2>All three courses</h2>
-            <div className="plans-course-price">${bundlePrice}<small> one-time</small></div>
-            <Link to="/checkout/bundle" className="text-link">Review bundle <span aria-hidden="true">↗</span></Link>
-          </article>
+          {availableBundles.map((item) => (
+            <article className="plans-course-card" key={item.id}>
+              <span className="eyebrow">ONE-TIME BUNDLE</span>
+              <h2>{item.title}</h2>
+              <div className="plans-course-price">{item.currency || "USD"} {item.price}<small> one-time</small></div>
+              <Link to={`/checkout/bundle?bundle=${encodeURIComponent(item.id)}`} className="text-link">Review bundle <span aria-hidden="true">↗</span></Link>
+            </article>
+          ))}
         </div>
       </main>
     );
   }
 
   const price = isBundle
-    ? bundlePrice
+    ? bundle.price
     : course.price !== "" && course.price != null
       ? course.price
       : prices[course.id];
-  const includedCourses = isBundle ? publicCourses : [course];
+  const currency = isBundle ? bundle.currency || "USD" : "USD";
+  const includedCourses = isBundle ? bundleCourses : [course];
 
   return (
     <main className="container checkout-page">
@@ -68,9 +88,10 @@ export default function Checkout() {
         <section className="panel checkout-summary">
           <h2>Order summary</h2>
           {includedCourses.map((item) => (
-            <div className="sum-row" key={item.id}><span>{item.title}</span><span>{isBundle ? "Included" : `$${price}`}</span></div>
+            <div className="sum-row" key={item.id}><span>{item.title}</span><span>{isBundle ? "Included" : `${currency} ${price}`}</span></div>
           ))}
-          <div className="sum-row total"><span>{isBundle ? "Bundle total · one-time" : "Course total · one-time"}</span><span>{price != null && price !== "" ? `$${price}` : "Not set"}</span></div>
+          <div className="sum-row total"><span>{isBundle ? "Bundle total · one-time" : "Course total · one-time"}</span><span>{price != null && price !== "" ? `${currency} ${price}` : "Not set"}</span></div>
+          {isBundle && <p><strong>Access:</strong> {bundle.accessDuration || "Access terms to be confirmed."}</p>}
           <p className="demo-note">This is an order preview only. No recurring subscription is included.</p>
           <Link to={isBundle ? "/plans" : `/courses/${course.id}`} className="text-link">Back to {isBundle ? "plans" : "course details"} <span aria-hidden="true">↗</span></Link>
         </section>

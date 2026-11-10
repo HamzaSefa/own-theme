@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { courses, isPublicCourse } from "../data/courses";
+import { courses, getPublicCourseData, isPublicCourse } from "../data/courses";
 import { details, faq } from "../data/details";
-import { bundlePrice, prices } from "../data/admin";
-import { adminStorageKeys, readAdminData } from "../data/adminWorkspace";
+import { prices } from "../data/admin";
+import { adminStorageKeys, getAdminPlans, isAvailableBundle, readAdminData } from "../data/adminWorkspace";
 import { enrollInFreeCourse, getCurrentUser, hasFreeCourseAccess } from "../data/studentPortal";
 
 const showcase = [
@@ -88,7 +88,9 @@ function SupportContactForm({ supportEmail }) {
 
 function hasConfirmedMembershipTerms(plans) {
   return plans.membershipStatus === "Available"
+    && plans.membershipPublicationStatus === "Published"
     && Boolean(plans.membershipPrice?.trim())
+    && Boolean(plans.membershipCurrency?.trim())
     && Boolean(plans.membershipBillingCycle?.trim())
     && Boolean(plans.membershipAccess?.trim())
     && Boolean(plans.membershipRenewalTerms?.trim());
@@ -97,19 +99,22 @@ function hasConfirmedMembershipTerms(plans) {
 export function CoursesPage() {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All courses");
+  const siteSettings = readAdminData(adminStorageKeys.settings, {});
   const categories = [
     "All courses",
-    "Short-Form & Social Media",
-    "Long-Form & YouTube",
-    "Film & Documentary",
+    ...(siteSettings.categories?.length ? siteSettings.categories : [
+      "Short-Form & Social Media",
+      "Long-Form & YouTube",
+      "Film & Documentary",
+    ]),
     "Free Mini-Course",
   ];
   const catalogEntries = useMemo(() => [
-    ...courses.filter(isPublicCourse).map((course) => ({
-      ...course,
-      category: course.category || (course.id === "short-form"
+    ...courses.filter(isPublicCourse).map((item) => ({
+      ...getPublicCourseData(item),
+      category: item.category || (item.id === "short-form"
         ? "Short-Form & Social Media"
-        : course.id === "long-form"
+        : item.id === "long-form"
           ? "Long-Form & YouTube"
           : "Film & Documentary"),
     })),
@@ -144,17 +149,9 @@ export function CoursesPage() {
     });
   }, [activeCategory, catalogEntries, query]);
   const publicCourses = courses.filter(isPublicCourse);
-  const allCoursePricesSet = publicCourses.every((course) =>
-    (course.price !== "" && course.price != null) || prices[course.id] != null
-  );
-  const total = publicCourses.reduce((sum, course) => sum + Number(
-    course.price !== "" && course.price != null ? course.price : prices[course.id] ?? 0
-  ), 0);
-  const saving = allCoursePricesSet ? total - bundlePrice : 0;
-  const completeBundleAvailable = courses.length === 3
-    && publicCourses.length === 3
-    && publicCourses.every((course) => course.purchaseOption !== "Subscription included");
-  const plans = readAdminData(adminStorageKeys.plans, { membershipStatus: "Coming soon", membershipPrice: "" });
+  const plans = getAdminPlans();
+  const publicCourseIds = publicCourses.map((course) => course.id);
+  const featuredBundle = plans.bundles.find((bundle) => isAvailableBundle(bundle, publicCourseIds));
   const membershipAvailable = hasConfirmedMembershipTerms(plans);
 
   return (
@@ -274,16 +271,16 @@ export function CoursesPage() {
         </div>
       </section>
 
-      {completeBundleAvailable && <section className="catalog-offer-promo">
+      {featuredBundle && <section className="catalog-offer-promo">
         <div>
-          <span className="eyebrow">ONE COURSE OR THE COMPLETE SET</span>
-          <h2>Build your skills across every format.</h2>
-          <p>Get all three courses in one bundle.{saving > 0 ? ` Save $${saving} compared with buying them individually.` : ""} Membership details are shared only when a plan is confirmed.</p>
+          <span className="eyebrow">ONE COURSE OR A ONE-TIME BUNDLE</span>
+          <h2>{featuredBundle.title}</h2>
+          <p>{featuredBundle.description || "A one-time purchase of the courses included in this bundle."} Membership details are shared only when a plan is confirmed.</p>
         </div>
         <div className="catalog-offer-action">
-          <strong>${bundlePrice}<small> one-time</small></strong>
-          <Link to="/checkout/bundle" className="btn btn-primary">Explore the bundle <span aria-hidden="true">↗</span></Link>
-          <span className="coming-soon">{membershipAvailable ? `Membership preview · ${plans.membershipPrice}` : plans.membershipStatus === "Paused" ? "Membership paused" : "Membership coming soon"}</span>
+          <strong>{featuredBundle.currency || "USD"} {featuredBundle.price}<small> one-time</small></strong>
+          <Link to={`/checkout/bundle?bundle=${encodeURIComponent(featuredBundle.id)}`} className="btn btn-primary">Explore the bundle <span aria-hidden="true">↗</span></Link>
+          <span className="coming-soon">{membershipAvailable ? `Membership preview · ${plans.membershipCurrency} ${plans.membershipPrice}` : plans.membershipStatus === "Paused" ? "Membership paused" : "Membership coming soon"}</span>
         </div>
       </section>}
 
@@ -310,17 +307,9 @@ export function CoursesPage() {
 export function BundlesMembershipPage() {
   const publicCourses = courses.filter(isPublicCourse);
   const individualCourses = publicCourses.filter((course) => course.purchaseOption !== "Subscription included");
-  const allCoursePricesSet = publicCourses.every((course) =>
-    (course.price !== "" && course.price != null) || prices[course.id] != null
-  );
-  const total = publicCourses.reduce((sum, course) => sum + Number(
-    course.price !== "" && course.price != null ? course.price : prices[course.id] ?? 0
-  ), 0);
-  const saving = allCoursePricesSet ? total - bundlePrice : 0;
-  const completeBundleAvailable = courses.length === 3
-    && publicCourses.length === 3
-    && publicCourses.every((course) => course.purchaseOption !== "Subscription included");
-  const plans = readAdminData(adminStorageKeys.plans, { membershipStatus: "Coming soon", membershipPrice: "" });
+  const plans = getAdminPlans();
+  const publicCourseIds = publicCourses.map((course) => course.id);
+  const visibleBundles = plans.bundles.filter((bundle) => isAvailableBundle(bundle, publicCourseIds));
   const membershipDetailsConfirmed = hasConfirmedMembershipTerms(plans);
   const planFaq = [
     {
@@ -339,7 +328,7 @@ export function BundlesMembershipPage() {
     },
     {
       q: "Can I buy the bundle and subscribe at the same time?",
-      a: "The bundle and membership are separate offers with separate terms. The bundle is currently available only through its one-time demo checkout; subscription checkout is not available in this preview.",
+      a: "Bundles and membership are separate offers with separate terms. Any published bundle is a one-time demo checkout; recurring subscription checkout is not available in this preview.",
     },
     {
       q: "Does the current checkout take a real payment?",
@@ -376,28 +365,40 @@ export function BundlesMembershipPage() {
         </div>
       </section>
 
-      {completeBundleAvailable && <section className="plans-bundle-section" aria-labelledby="bundle-plan-title">
-        <div className="plans-bundle-copy">
-          <span className="eyebrow">02 / COMPLETE BUNDLE · ONE-TIME PURCHASE</span>
-          <h2 id="bundle-plan-title">All three courses, one payment.</h2>
-          <p>The bundle includes the Short-Form, Long-Form, and Film & Documentary courses. Pay once; there is no recurring charge or renewal.</p>
-          <div className="plans-bundle-prices">
-            <strong>${bundlePrice}<small> one-time</small></strong>
-            <span>{allCoursePricesSet ? saving > 0 ? `Purchased separately: $${total} · Save $${saving}` : `Purchased separately: $${total}` : "Individual course prices are not fully set."}</span>
-          </div>
-          <Link to="/checkout/bundle" className="btn btn-primary">Get the one-time bundle <span aria-hidden="true">↗</span></Link>
-          <p className="plans-demo-note">Demo checkout only. No real payment is processed.</p>
-        </div>
-        <div className="plans-included">
-          <h3>Included courses & benefits</h3>
-          <ul className="check-list">
-            {publicCourses.map((course) => <li key={course.id}>{course.title}</li>)}
-            <li>Access terms published before enrollment</li>
-            <li>Project-based lessons and a course capstone</li>
-            <li>Keep a Theme Sheet as your personal style guide</li>
-          </ul>
-        </div>
-      </section>}
+      {visibleBundles.map((bundle, index) => {
+        const includedCourses = publicCourses.filter((course) => bundle.includedCourses.includes(course.id));
+        const allPricesSet = includedCourses.every((course) =>
+          (course.price !== "" && course.price != null) || prices[course.id] != null
+        );
+        const separateTotal = includedCourses.reduce((sum, course) => sum + Number(
+          course.price !== "" && course.price != null ? course.price : prices[course.id] ?? 0
+        ), 0);
+        const saving = allPricesSet ? separateTotal - Number(bundle.price) : 0;
+        return (
+          <section className="plans-bundle-section" aria-labelledby={`bundle-plan-title-${bundle.id}`} key={bundle.id}>
+            <div className="plans-bundle-copy">
+              <span className="eyebrow">0{index + 2} / ONE-TIME BUNDLE</span>
+              <h2 id={`bundle-plan-title-${bundle.id}`}>{bundle.title}</h2>
+              <p>{bundle.description || "A one-time purchase of the courses listed below. No recurring charge or renewal."}</p>
+              <div className="plans-bundle-prices">
+                <strong>{bundle.currency || "USD"} {bundle.price}<small> one-time</small></strong>
+                <span>{allPricesSet ? saving > 0 ? `Purchased separately: ${bundle.currency || "USD"} ${separateTotal} · Save ${bundle.currency || "USD"} ${saving}` : `Purchased separately: ${bundle.currency || "USD"} ${separateTotal}` : "Individual course prices are not fully set."}</span>
+              </div>
+              <p><strong>Access:</strong> {bundle.accessDuration || "Access terms to be confirmed."}</p>
+              <Link to={`/checkout/bundle?bundle=${encodeURIComponent(bundle.id)}`} className="btn btn-primary">Review one-time bundle <span aria-hidden="true">↗</span></Link>
+              <p className="plans-demo-note">Demo checkout only. No real payment is processed.</p>
+            </div>
+            <div className="plans-included">
+              <h3>Included courses & benefits</h3>
+              <ul className="check-list">
+                {includedCourses.map((course) => <li key={course.id}>{course.title}</li>)}
+                <li>Project-based lessons and a course capstone</li>
+                <li>Keep a Theme Sheet as your personal style guide</li>
+              </ul>
+            </div>
+          </section>
+        );
+      })}
 
       <section className="plans-membership-section" aria-labelledby="membership-title">
         <div>
@@ -408,7 +409,7 @@ export function BundlesMembershipPage() {
         {membershipDetailsConfirmed ? (
           <div className="plans-membership-details">
             <span className="coming-soon">Terms announced · preview only</span>
-            <strong>{plans.membershipPrice}<small> {plans.membershipBillingCycle}</small></strong>
+            <strong>{plans.membershipCurrency} {plans.membershipPrice}<small> {plans.membershipBillingCycle}</small></strong>
             <p><b>Included access:</b> {plans.membershipAccess}</p>
             <p><b>Renewal terms:</b> {plans.membershipRenewalTerms}</p>
             <p className="plans-demo-note">Subscription checkout is not connected, so enrollment is not available in this preview.</p>
@@ -447,10 +448,10 @@ export function BundlesMembershipPage() {
       <section className="plans-purchase-cta" aria-labelledby="plans-cta-title">
         <span className="eyebrow">06 / NEXT STEP</span>
         <h2 id="plans-cta-title">Ready to choose your course?</h2>
-        <p>Compare the individual tracks or select the complete one-time bundle.</p>
+        <p>Compare individual courses{visibleBundles.length ? " or select a published one-time bundle" : ""}.</p>
         <div className="plans-cta-actions">
           <Link to="/courses" className="btn btn-outline">Browse individual courses</Link>
-          <Link to="/checkout/bundle" className="btn btn-primary">Get the one-time bundle</Link>
+          {visibleBundles[0] && <Link to={`/checkout/bundle?bundle=${encodeURIComponent(visibleBundles[0].id)}`} className="btn btn-primary">Review {visibleBundles[0].title}</Link>}
         </div>
       </section>
     </main>
@@ -848,6 +849,7 @@ export function FreeCourseLessonPage() {
 export function FaqPage() {
   const settings = readAdminData(adminStorageKeys.settings, {});
   const supportEmail = settings.supportEmail?.trim();
+  const supportPhone = settings.supportPhone?.trim();
   const supportQuestions = [
     { q: "How do I enroll in a course?", a: "Choose a course or one-time bundle and follow its course page. Checkout in this preview does not take payment or verify enrollment." },
     { q: "My video will not play. What should I do?", a: "There are no hosted course videos connected in this preview. When lessons are available, check your connection and supported browser first; contact support with the lesson title and browser if playback still fails." },
@@ -878,6 +880,7 @@ export function FaqPage() {
           <span className="eyebrow">CONTACT SUPPORT</span>
           <h2>Still need a hand?</h2>
           <p>{supportEmail ? <>Email: <a className="footer-link" href={`mailto:${supportEmail}`}>{supportEmail}</a></> : "Business contact details have not been configured yet. Add a support email in Admin → Site content & settings to enable email contact."}</p>
+          {supportPhone && <p>Phone: <a className="footer-link" href={`tel:${supportPhone}`}>{supportPhone}</a></p>}
         </div>
         <SupportContactForm supportEmail={supportEmail} />
       </section>
@@ -888,6 +891,7 @@ export function FaqPage() {
 export function ContactPage() {
   const settings = readAdminData(adminStorageKeys.settings, {});
   const supportEmail = settings.supportEmail?.trim();
+  const supportPhone = settings.supportPhone?.trim();
 
   return (
     <main className="container public-page">
@@ -898,7 +902,7 @@ export function ContactPage() {
       />
       <div className="contact-business-panel">
         <span className="contact-mark" aria-hidden="true">OT</span>
-        <div><h2>Own Theme support</h2><p>{supportEmail ? <>Email <a className="footer-link" href={`mailto:${supportEmail}`}>{supportEmail}</a></> : "Business email and contact details are not configured. Add the support email in Admin → Site content & settings."}</p></div>
+        <div><h2>Own Theme support</h2><p>{supportEmail ? <>Email <a className="footer-link" href={`mailto:${supportEmail}`}>{supportEmail}</a></> : "Business email and contact details are not configured. Add the support email in Admin → Site content & settings."}</p>{supportPhone && <p>Phone: <a className="footer-link" href={`tel:${supportPhone}`}>{supportPhone}</a></p>}</div>
       </div>
       <section className="contact-panel">
         <h2>Contact form</h2>
