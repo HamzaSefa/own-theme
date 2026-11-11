@@ -38,14 +38,10 @@ const themeFields = [
 const studentLinks = [
   { to: studentDashboardPath, label: "Dashboard", icon: "01" },
   { to: "/app/courses", label: "My Courses", icon: "02" },
-  { to: "/app/assignments", label: "Assignments", icon: "03" },
-  { to: "/app/feedback", label: "Feedback", icon: "04" },
-  { to: "/app/showcase", label: "My Showcase", icon: "05" },
-  { to: "/app/settings", label: "Settings", icon: "06" },
+  { to: "/app/settings", label: "Settings", icon: "03" },
 ];
 
 const studentToolLinks = [
-  { to: "/app/theme-sheet", label: "Theme Sheet", icon: "T" },
   { to: "/app/notifications", label: "Notifications", icon: "N" },
   { to: "/app/billing", label: "Orders & subscription", icon: "$" },
 ];

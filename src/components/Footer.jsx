@@ -71,7 +71,7 @@ export default function Footer() {
               Learn the craft. Find your point of view. Make work that feels
               unmistakably yours.
             </p>
-            <Link to="/#courses" className="footer-cta">
+            <Link to="/courses" className="footer-cta">
               Find your course <span aria-hidden="true">↗</span>
             </Link>
           </div>
