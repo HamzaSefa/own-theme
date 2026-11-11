@@ -38,16 +38,7 @@ const themeFields = [
 const studentLinks = [
   { to: studentDashboardPath, label: "Dashboard", icon: "01" },
   { to: "/app/courses", label: "My Courses", icon: "02" },
-  { to: "/app/assignments", label: "Assignments", icon: "03" },
-  { to: "/app/feedback", label: "Feedback", icon: "04" },
-  { to: "/app/showcase", label: "My Showcase", icon: "05" },
-  { to: "/app/settings", label: "Settings", icon: "06" },
-];
-
-const studentToolLinks = [
-  { to: "/app/theme-sheet", label: "Theme Sheet", icon: "T" },
-  { to: "/app/notifications", label: "Notifications", icon: "N" },
-  { to: "/app/billing", label: "Orders & subscription", icon: "$" },
+  { to: "/app/settings", label: "Account settings", icon: "03" },
 ];
 
 function useStudentUser() {
@@ -166,22 +157,8 @@ function StudentSidebar({ menuOpen, closeMenu }) {
           </NavLink>
         ))}
       </nav>
-      <div className="student-sidebar-label student-tools-label">YOUR TOOLS</div>
-      <nav aria-label="Student tools">
-        {studentToolLinks.map((item) => (
-          <NavLink
-            to={item.to}
-            className={({ isActive }) => isActive ? "student-nav-link active" : "student-nav-link"}
-            key={item.to}
-            onClick={closeMenu}
-          >
-            <span>{item.icon}</span>
-            {item.label}
-          </NavLink>
-        ))}
-      </nav>
       <div className="student-sidebar-bottom">
-        <Link to="/courses">Explore courses <span aria-hidden="true">↗</span></Link>
+        <Link to="/">Back to Own Theme <span aria-hidden="true">↗</span></Link>
         <small>{user?.email}</small>
       </div>
     </aside>
@@ -446,20 +423,10 @@ export function MyCoursesPage() {
         )
       ) : (
         <EmptyState
-          title="Your first course is waiting."
-          text="Courses appear here after you have access. Browse the catalog to find your next learning track."
-          to="/courses"
-          label="Explore course catalog"
+          title="No courses assigned yet."
+          text="Your course owner can grant access. Once enrolled, your lessons and progress will appear here."
         />
       )}
-      <aside className="student-catalog-prompt">
-        <div>
-          <span className="eyebrow">KEEP EXPLORING</span>
-          <h2>Looking for another track?</h2>
-          <p>See all courses available in the public catalog. Courses without access stay out of your learning library.</p>
-        </div>
-        <Link className="btn btn-outline" to="/courses">Browse catalog <span aria-hidden="true">↗</span></Link>
-      </aside>
     </div>
   );
 }
@@ -484,8 +451,6 @@ export function CurriculumPage() {
     ? course.modules.findIndex((module) => module.lessons.some((lesson) => lesson.id === currentLesson.id))
     : -1;
   const progress = lessons.length ? getProgress(course, completed) : 0;
-  const courseSubmissions = getUserSubmissions()
-    .filter((assignment) => assignment.courseId === course.id);
   const moduleResources = course.modules.flatMap((module) =>
     module.lessons
       .filter((lesson) => lesson.resourceUrl && lesson.locked !== true)
@@ -535,13 +500,6 @@ export function CurriculumPage() {
             {course.modules.map((module, index) => {
               const moduleLessons = module.lessons || [];
               const moduleCompleted = moduleLessons.filter((lesson) => completedLessons.has(lesson.id)).length;
-              const moduleAssignments = Array.isArray(module.assignments)
-                ? module.assignments
-                : module.assignment
-                  ? [module.assignment]
-                  : module.assignmentTitle
-                    ? [{ title: module.assignmentTitle, description: module.assignmentDescription }]
-                    : [];
               return (
                 <details
                   className="student-curriculum-module"
@@ -608,26 +566,6 @@ export function CurriculumPage() {
                     ) : (
                       <p className="student-curriculum-note">Lessons for this module have not been added yet.</p>
                     )}
-                    <div className="student-module-assignment">
-                      <div>
-                        <span className="eyebrow">MODULE ASSIGNMENT</span>
-                        {moduleAssignments.length ? (
-                          moduleAssignments.map((assignment, assignmentIndex) => {
-                            const assignmentTitle = typeof assignment === "string" ? assignment : assignment.title;
-                            const assignmentDescription = typeof assignment === "string" ? "" : assignment.description;
-                            return (
-                              <div className="student-module-assignment-item" key={`${assignmentTitle}-${assignmentIndex}`}>
-                                <strong>{assignmentTitle || "Assignment"}</strong>
-                                {assignmentDescription && <p>{assignmentDescription}</p>}
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <p>No assignment has been linked to this module yet.</p>
-                        )}
-                      </div>
-                      <Link to="/app/assignments" className="text-link">Go to assignments <span aria-hidden="true">↗</span></Link>
-                    </div>
                   </div>
                 </details>
               );
@@ -658,19 +596,14 @@ export function CurriculumPage() {
               ))}
             </ul>
           ) : (
-            <p>No downloadable course resources have been added to the available lessons yet.</p>
+            <p>No course resources have been added to the available lessons yet.</p>
           )}
+          <p className="admin-disclaimer">Resources open in a separate tab in this preview. An in-app document viewer and protected downloads are not connected.</p>
         </article>
         <article className="student-course-support-card">
           <span className="eyebrow">COMPLETION</span>
           <h2>Course completion criteria</h2>
           <p>Completion is based on marking all {lessons.length} course lessons complete.</p>
-          <p>Assignments are not currently configured as a course completion requirement.</p>
-          <div className="student-course-assignment-summary">
-            <strong>Course submissions</strong>
-            <span>{courseSubmissions.length ? `${courseSubmissions.length} submitted` : "No submissions yet"}</span>
-            <Link to="/app/assignments">View assignments <span aria-hidden="true">↗</span></Link>
-          </div>
         </article>
       </section>
     </div>

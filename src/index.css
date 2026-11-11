@@ -2193,3 +2193,15 @@ a.student-module-lesson:hover { background: rgba(255,255,255,.025); color: #f0ad
 @media (prefers-reduced-motion: reduce) {
   .ui-skeleton-line { animation: none; }
 }
+
+.scope-section { padding-top: 84px; padding-bottom: 84px; }
+.scope-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.scope-card { min-height: 190px; padding: 24px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+.scope-card h3 { margin: 14px 0 8px; font-size: 20px; }
+.scope-card p { color: var(--muted); line-height: 1.7; }
+.scope-notice { margin-top: 20px; padding: 16px 18px; border: 1px solid rgba(251, 191, 36, .3); border-radius: var(--radius-md); background: rgba(251, 191, 36, .06); color: var(--muted); font-size: 13px; line-height: 1.65; }
+@media (max-width: 760px) {
+  .scope-section { padding-top: 60px; padding-bottom: 60px; }
+  .scope-grid { grid-template-columns: 1fr; }
+  .scope-card { min-height: 0; }
+}

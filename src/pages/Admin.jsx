@@ -2,15 +2,10 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import Overview from "./admin/Overview";
 import {
-  AssignmentReview,
   CourseManagement,
-  InstructorFeedbackTools,
   LessonManagement,
   MediaManagement,
   OrdersReview,
-  PlanManagement,
-  ShowcaseModeration,
-  SiteSettings,
   StudentManagement,
 } from "./admin/Workspace";
 import { getCurrentUser } from "../data/studentPortal";
@@ -21,14 +16,9 @@ const sections = [
   { id: "overview", label: "Admin overview", icon: "01" },
   { id: "courses", label: "Course management", icon: "02" },
   { id: "lessons", label: "Modules & lessons", icon: "03" },
-  { id: "media", label: "Video & resources", icon: "04" },
-  { id: "students", label: "Student management", icon: "05" },
-  { id: "orders", label: "Orders & payments", icon: "06" },
-  { id: "assignments", label: "Assignment review", icon: "07" },
-  { id: "feedback", label: "Instructor feedback", icon: "08" },
-  { id: "plans", label: "Bundles & plans", icon: "09" },
-  { id: "showcase", label: "Showcase moderation", icon: "10" },
-  { id: "settings", label: "Site content & settings", icon: "11" },
+  { id: "media", label: "Videos & documents", icon: "04" },
+  { id: "students", label: "Students & access", icon: "05" },
+  { id: "orders", label: "Orders & revenue", icon: "06" },
 ];
 
 export default function Admin() {
@@ -111,11 +101,6 @@ export default function Admin() {
           {routeTab === "media" && <MediaManagement />}
           {routeTab === "students" && <StudentManagement />}
           {routeTab === "orders" && <OrdersReview />}
-          {routeTab === "assignments" && <AssignmentReview submissionId={location.pathname.startsWith("/admin/assignments/") ? location.pathname.slice("/admin/assignments/".length) : ""} />}
-          {routeTab === "feedback" && <InstructorFeedbackTools />}
-          {routeTab === "plans" && <PlanManagement />}
-          {routeTab === "showcase" && <ShowcaseModeration />}
-          {routeTab === "settings" && <SiteSettings />}
         </main>
       </div>
       <p className="admin-preview-note">Unsecured demo preview · Browser-only controls are not admin authorization. Server-side access checks are required for every protected action.</p>

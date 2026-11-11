@@ -20,16 +20,13 @@ export default function Navbar() {
 
         <nav className={open ? "nav-links open" : "nav-links"}>
           <NavLink to="/" end onClick={close}>Home</NavLink>
-          <NavLink to="/courses" onClick={close}>Courses</NavLink>
-          <NavLink to="/showcase" onClick={close}>Showcase</NavLink>
-          <NavLink to="/about" onClick={close}>About</NavLink>
           {user
             ? <Link to={user.role === "admin" ? "/admin" : "/app"} className="nav-account-link" onClick={close}>
                 {user.role === "admin" ? "Admin workspace" : "Learning space"}
               </Link>
-            : <NavLink to="/login" onClick={close}>Log In</NavLink>}
-          <Link to={user ? (user.role === "admin" ? "/admin" : "/app") : "/courses"} className="btn btn-primary nav-cta" onClick={close}>
-            {user ? "Continue learning" : "Explore Courses"}
+            : <NavLink to="/login" onClick={close}>Sign in</NavLink>}
+          <Link to={user ? (user.role === "admin" ? "/admin" : "/app") : "/signup"} className="btn btn-primary nav-cta" onClick={close}>
+            {user ? (user.role === "admin" ? "Open workspace" : "Continue learning") : "Create account"}
           </Link>
         </nav>
       </div>
