@@ -14,11 +14,11 @@ export default function Navbar() {
       <div className="container nav-inner">
         <Link to="/" className="logo" onClick={close}>{/^https?:\/\//i.test(logoUrl || "") ? <img className="brand-logo-image" src={logoUrl} alt="Own Theme" /> : <>Own<span>Theme</span></>}</Link>
 
-        <button className="menu-btn" aria-label="Toggle menu" onClick={() => setOpen(!open)}>
+        <button className="menu-btn" type="button" aria-label="Toggle menu" aria-expanded={open} aria-controls="primary-navigation" onClick={() => setOpen(!open)}>
           {open ? "✕" : "☰"}
         </button>
 
-        <nav className={open ? "nav-links open" : "nav-links"}>
+        <nav id="primary-navigation" className={open ? "nav-links open" : "nav-links"}>
           <NavLink to="/" end onClick={close}>Home</NavLink>
           <NavLink to="/courses" onClick={close}>Courses</NavLink>
           <NavLink to="/showcase" onClick={close}>Showcase</NavLink>

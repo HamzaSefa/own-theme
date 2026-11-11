@@ -113,6 +113,7 @@ function StudentLayout({ children }) {
 function StudentHeader({ menuOpen, onToggleMenu }) {
   const navigate = useNavigate();
   const user = useStudentUser();
+  const initials = (user?.name || "Student").trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 
   function handleSignOut() {
     signOut();
@@ -137,6 +138,7 @@ function StudentHeader({ menuOpen, onToggleMenu }) {
         <Link to="/" className="logo">OWN <span>THEME</span></Link>
       </div>
       <div className="student-header-user">
+        <span className="student-header-avatar" aria-hidden="true">{initials || "S"}</span>
         <span>{user?.name || "Student"}</span>
         <button className="btn btn-outline btn-sm" onClick={handleSignOut}>
           Sign out
@@ -393,12 +395,14 @@ export function MyCoursesPage() {
                   <div className="student-owned-course-grid">
                     {sectionCourses.map(({ course, lessons, completed, progress, status }) => {
                       const next = lessons.find((lesson) => !completed.includes(lesson.id)) || lessons[0];
+                      const courseArtwork = course.thumbnail || course.heroImage;
                       const destination = status === "completed"
                         ? `/app/courses/${course.id}`
                         : `/app/learn/${next.id}`;
                       return (
                         <article className="student-owned-course-card" key={course.id}>
-                          <div className={`student-owned-course-art student-owned-course-art-${course.id}`} data-swarm-media="student-course-art">
+                          <div className={`student-owned-course-art student-owned-course-art-${course.id}`}>
+                            {courseArtwork && <img src={courseArtwork} alt="" loading="lazy" decoding="async" />}
                             <span>{course.tag}</span>
                             <i aria-hidden="true" />
                           </div>
@@ -1288,6 +1292,7 @@ export function MyShowcasePage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
+  const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [courseId, setCourseId] = useState(ownedCourses()[0]?.course.id || "");
   const [assignmentId, setAssignmentId] = useState("");
   const [visibility, setVisibility] = useState("private");
@@ -1305,6 +1310,7 @@ export function MyShowcasePage() {
     setTitle("");
     setDescription("");
     setMediaUrl("");
+    setThumbnailUrl("");
     setCourseId(owned[0]?.course.id || "");
     setAssignmentId("");
     setVisibility("private");
@@ -1320,6 +1326,7 @@ export function MyShowcasePage() {
     setTitle(project.title || "");
     setDescription(project.description || "");
     setMediaUrl(project.mediaUrl || "");
+    setThumbnailUrl(project.thumbnailUrl || "");
     setCourseId(project.courseId || owned[0]?.course.id || "");
     setAssignmentId(project.assignmentId || "");
     setVisibility(project.showcaseConsent ? "public" : "private");
@@ -1337,6 +1344,12 @@ export function MyShowcasePage() {
       setMessageIsError(true);
       return;
     }
+    const thumbnail = thumbnailUrl.trim();
+    if (thumbnail && !/^https?:\/\//i.test(thumbnail)) {
+      setMessage("Enter a valid http or https thumbnail image URL, or leave it blank.");
+      setMessageIsError(true);
+      return;
+    }
     if (visibility === "public" && !consent) {
       setMessage("To request public display, confirm your consent. Otherwise, keep this project private.");
       setMessageIsError(true);
@@ -1349,6 +1362,7 @@ export function MyShowcasePage() {
       title: title.trim(),
       description: description.trim(),
       mediaUrl: url,
+      thumbnailUrl: thumbnail,
       url,
       courseId: selectedAssignment?.courseId || courseId,
       assignmentId,
@@ -1358,6 +1372,7 @@ export function MyShowcasePage() {
         && previous.title === title.trim()
         && previous.description === description.trim()
         && previous.mediaUrl === url
+        && previous.thumbnailUrl === thumbnail
         && previous.courseId === (selectedAssignment?.courseId || courseId)),
       updatedAt: new Date().toISOString(),
     };
@@ -1462,6 +1477,12 @@ export function MyShowcasePage() {
         <div className="field">
           <label htmlFor="showcase-media-url">Media link</label>
           <input id="showcase-media-url" type="url" required value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://…" />
+          <small>Direct MP4, WebM, or Ogg videos and YouTube or Vimeo links can play on the project page. Other links open on their original platform.</small>
+        </div>
+        <div className="field">
+          <label htmlFor="showcase-thumbnail-url">Thumbnail image URL (optional)</label>
+          <input id="showcase-thumbnail-url" type="url" value={thumbnailUrl} onChange={(event) => setThumbnailUrl(event.target.value)} placeholder="https://…" />
+          <small>Use an image you have permission to share. Without one, supported video links use their available preview.</small>
         </div>
         <div className="field">
           <label htmlFor="showcase-course">Associated course</label>
@@ -1622,8 +1643,8 @@ export function ProfilePage() {
         <button className="btn btn-primary" type="submit">Save profile</button>
         <SuccessMessage>{message}</SuccessMessage>
         <div className="student-profile-image-note">
-          <span className="student-profile-avatar" aria-hidden="true">{name.trim().charAt(0).toUpperCase() || "S"}</span>
-          <p>Profile image upload is not supported in this preview.</p>
+          <span className="student-profile-avatar" aria-hidden="true">{name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "S"}</span>
+          <p><strong>{name || "Student"}</strong><span>Profile image upload is not supported in this preview.</span></p>
         </div>
       </form>
 

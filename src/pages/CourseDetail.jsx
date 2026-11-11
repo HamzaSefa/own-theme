@@ -42,7 +42,7 @@ export default function CourseDetail() {
   return (
     <main className="container course-detail-page">
       <section className={`course-detail-hero course-detail-${course.id}`}>
-        {course.heroImage && <div className="course-detail-hero-background" data-swarm-media="course-hero" style={{ backgroundImage: `linear-gradient(90deg,rgba(8,12,11,.96),rgba(8,12,11,.7)),url("${course.heroImage}")` }} />}
+        {course.heroImage && <div className="course-detail-hero-background" style={{ backgroundImage: `linear-gradient(90deg,rgba(8,12,11,.96),rgba(8,12,11,.7)),url("${course.heroImage}")` }} />}
         <div className="course-detail-hero-copy">
           <Link to="/courses" className="course-back-link">← All courses</Link>
           <span className="tag">{course.tag}</span>
@@ -51,13 +51,13 @@ export default function CourseDetail() {
           <div className="pills">
             {course.level && <span className="pill">{course.level}</span>}
             {lessonCount > 0 && <span className="pill">{lessonCount} lessons</span>}
-            {course.estimatedDuration && <span className="pill">{course.estimatedDuration}</span>}
+            {(course.estimatedDuration || info?.hours) && <span className="pill">{course.estimatedDuration || info.hours}</span>}
             {course.accessTerms && <span className="pill">{course.accessTerms}</span>}
           </div>
           {enrollmentAction}
         </div>
         <div className="course-trailer" aria-label={`${course.title} trailer preview`}>
-          <div className="course-trailer-art" data-swarm-media="course-trailer"><span>OWN THE FRAME / {course.tag}</span><i /></div>
+          <div className="course-trailer-art"><span>OWN THE FRAME / {course.tag}</span><i /></div>
           <div className="course-trailer-message">
             <span className="course-trailer-mark">▶</span>
             <div><strong>Course trailer</strong><span>Preview video coming soon</span></div>
@@ -172,7 +172,7 @@ export default function CourseDetail() {
           <h2>{subscriptionOnly ? "Included with membership" : "Individual course"}</h2>
           {subscriptionOnly
             ? <p>Available through a separate subscription offer. Review membership access and renewal terms before enrolling.</p>
-            : <p className="course-enrollment-price">{price != null && price !== "" ? `$${price}` : "Price not set"}<small>{price != null && price !== "" ? " USD · one time" : ""}</small></p>}
+            : <p className="course-enrollment-price">{price != null && price !== "" ? `USD ${price}` : "Price not set"}<small>{price != null && price !== "" ? " · one time" : ""}</small></p>}
           <p>{course.accessTerms || "Access duration and terms have not been specified."}</p>
           {enrollmentAction}
           <p className="course-enrollment-note">{subscriptionOnly ? "Subscription billing and access are separate from one-time course purchases. Membership checkout is not connected in this preview." : "This is an individual course option, separate from a bundle or subscription. Checkout is a demo and does not process a real payment."}</p>

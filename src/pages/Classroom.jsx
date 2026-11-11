@@ -142,7 +142,12 @@ function LessonPlayer({ resolved, enrollment }) {
       <header className="lesson-player-topbar">
         <Link to={`/app/courses/${course.id}`} className="lesson-player-back">← Course overview</Link>
         <span className="lesson-player-course-title">{course.title}</span>
-        <span className="lesson-player-top-progress">{progress}% complete</span>
+        <span className="lesson-player-top-progress">
+          <span className="lesson-player-progress-track" role="progressbar" aria-label="Course progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress}>
+            <span style={{ width: `${progress}%` }} />
+          </span>
+          <span>{progress}% complete</span>
+        </span>
       </header>
 
       <div className="lesson-player-layout">
@@ -159,6 +164,7 @@ function LessonPlayer({ resolved, enrollment }) {
               <>
                 <video
                   data-swarm-media="lesson-video"
+                  data-swarm-trigger="viewport"
                   className="lesson-video"
                   controls
                   preload="metadata"

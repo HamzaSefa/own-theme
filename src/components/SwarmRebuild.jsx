@@ -69,17 +69,20 @@ function drawPointer(context, x, y, color) {
 }
 
 function getMediaKey(media) {
+  const trigger = media.getAttribute("data-swarm-trigger") || "viewport";
+  const replay = media.hasAttribute("data-swarm-replay");
+  const config = `|${trigger}|${replay}`;
   if (media instanceof HTMLImageElement) {
     const sources = [...(media.closest("picture")?.querySelectorAll("source") || [])]
       .map((source) => `${source.getAttribute("srcset") || ""}|${source.getAttribute("media") || ""}|${source.getAttribute("type") || ""}`)
       .join(",");
-    return `${media.getAttribute("src") || ""}|${media.getAttribute("srcset") || ""}|${sources}`;
+    return `${media.getAttribute("src") || ""}|${media.getAttribute("srcset") || ""}|${sources}${config}`;
   }
   if (media instanceof HTMLVideoElement) {
     const sources = [...media.querySelectorAll("source")].map((source) => `${source.src}|${source.type}`).join(",");
-    return `${media.getAttribute("src") || ""}|${sources}|${media.getAttribute("poster") || ""}`;
+    return `${media.getAttribute("src") || ""}|${sources}|${media.getAttribute("poster") || ""}${config}`;
   }
-  return media.getAttribute("style") || "";
+  return `${media.getAttribute("style") || ""}${config}`;
 }
 
 function isMediaReady(media) {
@@ -246,11 +249,9 @@ export default function SwarmRebuild() {
   useEffect(() => {
     const records = new WeakMap();
     const activeRecords = new Set();
-    const completedRecords = new Set();
     const queue = [];
     let activeCount = 0;
     let stopped = false;
-    let completedScrollFrame = 0;
     const motionPreference = window.matchMedia(reducedMotionQuery);
 
     function releaseSlot(record) {
@@ -265,24 +266,22 @@ export default function SwarmRebuild() {
       record.cancelAnimation?.();
       record.cancelAnimation = null;
       releaseSlot(record);
-      record.listeners.forEach(([event, listener]) => media.removeEventListener(event, listener));
+      record.listeners.forEach(([target, event, listener]) => target.removeEventListener(event, listener));
       record.listeners = [];
       intersectionObserver?.unobserve(media);
       activeRecords.delete(record);
-      completedRecords.delete(record);
       if (records.get(media) === record) records.delete(media);
     }
 
-    function finish(media, record) {
+    function finish(record) {
       record.cancelAnimation = null;
       record.status = "done";
       releaseSlot(record);
-      completedRecords.add(record);
       pump();
     }
 
     function maybeQueue(media, record) {
-      if (stopped || !media.isConnected || records.get(media) !== record || record.status !== "waiting" || !record.inViewport) return;
+      if (stopped || !media.isConnected || records.get(media) !== record || record.status !== "waiting" || !record.inViewport || !record.triggered) return;
       if (motionPreference.matches) {
         record.status = "skipped";
         return;
@@ -291,6 +290,32 @@ export default function SwarmRebuild() {
       record.status = "queued";
       queue.push({ media, record });
       pump();
+    }
+
+    function trigger(media, record) {
+      if (stopped || !media.isConnected || records.get(media) !== record || motionPreference.matches) return;
+      if (record.status === "done" || record.status === "error") {
+        if (record.trigger !== "hover" && !media.hasAttribute("data-swarm-replay")) return;
+        record.status = "waiting";
+      }
+      if (record.status === "skipped") return;
+      record.triggered = true;
+      record.inViewport = true;
+      maybeQueue(media, record);
+    }
+
+    function onReplayClick(event) {
+      if (!(event.target instanceof Element)) return;
+      const control = event.target.closest("[data-swarm-replay-control]");
+      if (!control) return;
+      const media = control.closest(mediaSelector) || control.parentElement?.querySelector(mediaSelector);
+      if (!media) {
+        console.error("Swarm Rebuild replay control has no matching media.");
+        return;
+      }
+      if (!records.has(media)) refresh(media);
+      const record = records.get(media);
+      if (record) trigger(media, record);
     }
 
     function pump() {
@@ -308,7 +333,7 @@ export default function SwarmRebuild() {
             return;
           }
           record.status = "running";
-          record.cancelAnimation = createOverlay(media, () => finish(media, record));
+          record.cancelAnimation = createOverlay(media, () => finish(record));
           if (!record.cancelAnimation) {
             record.status = "error";
             releaseSlot(record);
@@ -328,7 +353,18 @@ export default function SwarmRebuild() {
       }
       if (existing) removeRecord(media, existing);
 
-      const record = { media, key, status: "waiting", inViewport: false, hasSlot: false, timer: 0, cancelAnimation: null, listeners: [] };
+      const record = {
+        media,
+        key,
+        trigger: media.getAttribute("data-swarm-trigger") || "viewport",
+        status: "waiting",
+        inViewport: false,
+        triggered: false,
+        hasSlot: false,
+        timer: 0,
+        cancelAnimation: null,
+        listeners: [],
+      };
       records.set(media, record);
       activeRecords.add(record);
       const onMediaEvent = () => refresh(media);
@@ -339,8 +375,18 @@ export default function SwarmRebuild() {
           : [];
       events.forEach((event) => {
         media.addEventListener(event, onMediaEvent);
-        record.listeners.push([event, onMediaEvent]);
+        record.listeners.push([media, event, onMediaEvent]);
       });
+      if (record.trigger === "hover" || media.hasAttribute("data-swarm-replay")) {
+        const interactionTarget = media instanceof HTMLImageElement ? media.parentElement : media;
+        if (interactionTarget) {
+          const onInteract = () => trigger(media, record);
+          ["pointerenter", "focusin"].forEach((event) => {
+            interactionTarget.addEventListener(event, onInteract);
+            record.listeners.push([interactionTarget, event, onInteract]);
+          });
+        }
+      }
 
       if (motionPreference.matches) {
         record.status = "skipped";
@@ -377,10 +423,7 @@ export default function SwarmRebuild() {
           if (!record) return;
           if (entry.isIntersecting) {
             record.inViewport = true;
-            if (record.status === "done" || record.status === "error") {
-              record.status = "waiting";
-              completedRecords.delete(record);
-            }
+            if (record.trigger === "viewport" && !record.triggered) record.triggered = true;
             maybeQueue(entry.target, record);
           } else {
             record.inViewport = false;
@@ -408,7 +451,7 @@ export default function SwarmRebuild() {
         const visible = isInViewport(record.media);
         if (visible && !record.inViewport) {
           record.inViewport = true;
-          if (record.status === "done" || record.status === "error") record.status = "waiting";
+          if (record.trigger === "viewport" && !record.triggered) record.triggered = true;
           maybeQueue(record.media, record);
         } else if (!visible && record.inViewport) {
           record.inViewport = false;
@@ -421,24 +464,6 @@ export default function SwarmRebuild() {
             pump();
           }
         }
-      });
-    }
-
-    function updateCompletedMediaOnScroll() {
-      if (completedScrollFrame || stopped) return;
-      completedScrollFrame = requestAnimationFrame(() => {
-        completedScrollFrame = 0;
-        completedRecords.forEach((record) => {
-          const visible = isInViewport(record.media);
-          if (!visible) {
-            record.inViewport = false;
-          } else if (!record.inViewport) {
-            record.inViewport = true;
-            record.status = "waiting";
-            completedRecords.delete(record);
-            maybeQueue(record.media, record);
-          }
-        });
       });
     }
 
@@ -469,14 +494,13 @@ export default function SwarmRebuild() {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["src", "srcset", "poster", "style", "data-swarm-media"],
+      attributeFilter: ["src", "srcset", "poster", "style", "data-swarm-media", "data-swarm-trigger", "data-swarm-replay"],
     });
 
     function onMotionChange(event) {
       if (event.matches) {
         activeRecords.forEach((record) => {
           record.status = "skipped";
-          completedRecords.delete(record);
           record.cancelAnimation?.();
           record.cancelAnimation = null;
           if (record.timer) clearTimeout(record.timer);
@@ -500,7 +524,7 @@ export default function SwarmRebuild() {
 
     if (motionPreference.addEventListener) motionPreference.addEventListener("change", onMotionChange);
     else motionPreference.addListener(onMotionChange);
-    window.addEventListener("scroll", updateCompletedMediaOnScroll, { passive: true });
+    document.addEventListener("click", onReplayClick);
     if (!intersectionObserver) {
       window.addEventListener("scroll", updateViewportFallback, true);
       window.addEventListener("resize", updateViewportFallback);
@@ -513,8 +537,7 @@ export default function SwarmRebuild() {
       intersectionObserver?.disconnect();
       if (motionPreference.removeEventListener) motionPreference.removeEventListener("change", onMotionChange);
       else motionPreference.removeListener(onMotionChange);
-      window.removeEventListener("scroll", updateCompletedMediaOnScroll);
-      cancelAnimationFrame(completedScrollFrame);
+      document.removeEventListener("click", onReplayClick);
       if (!intersectionObserver) {
         window.removeEventListener("scroll", updateViewportFallback, true);
         window.removeEventListener("resize", updateViewportFallback);

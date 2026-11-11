@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import Reveal from "../components/Reveal";
 import { courses as courseCatalog, getPublicCourseData, isPublicCourse } from "../data/courses";
@@ -48,7 +47,6 @@ const editDecisions = [
 ];
 
 export default function Home() {
-  const [reelNote, setReelNote] = useState(false);
   const courses = courseCatalog.filter(isPublicCourse).map((item, index) => ({
     ...getPublicCourseData(item),
     slug: item.slug || item.id,
@@ -96,10 +94,10 @@ export default function Home() {
               <h1>{highlightIndex >= 0
                 ? <>{headline.slice(0, highlightIndex)}<span>{highlightedPhrase}</span>{headline.slice(highlightIndex + highlightedPhrase.length)}</>
                 : headline}</h1>
-              <p>{siteSettings.homeDescription || "Three video editing courses that teach you to design your own style, not copy a template."}</p>
+              <p>{siteSettings.homeDescription || "Learn practical editing, visual storytelling, and a workflow for shaping polished films with a style of your own."}</p>
               <div className="hero-btns">
                 <Link to="/courses" className="btn btn-primary">Explore Courses <span aria-hidden="true">↗</span></Link>
-                <a href="#showreel" className="btn btn-outline"><span className="hero-play" aria-hidden="true">▶</span> Watch showreel</a>
+                <a href="#showreel" className="btn btn-outline">See how we teach <span aria-hidden="true">↓</span></a>
               </div>
               <div className="hero-proof">
                 <span>CRAFT OVER COPY</span><i /><span>YOUR STYLE, BUILT BY YOU</span>
@@ -107,7 +105,8 @@ export default function Home() {
             </div>
 
             <div className="hero-visual">
-              <img data-swarm-media="hero" src="/editor-studio.svg" alt="Cinematic video editing studio with a film viewer and editing timeline" />
+              <img data-swarm-media="hero" data-swarm-trigger="viewport" data-swarm-replay src="/editor-studio.svg" alt="Cinematic video editing studio with a film viewer and editing timeline" />
+              <button className="swarm-replay-control" type="button" data-swarm-replay-control aria-label="Replay the hero visual rebuild">Replay</button>
               <div className="visual-label visual-label-top"><span className="visual-live" /> THE EDITING ROOM</div>
               <div className="visual-card">
                 <span className="visual-card-mark">OT / 01</span>
@@ -142,7 +141,7 @@ export default function Home() {
               <Link to="/about" className="text-link">Our philosophy <span aria-hidden="true">↗</span></Link>
             </div>
             <div className="brand-film">
-              <div className="brand-film-frame" data-swarm-media="featured-film-art">
+              <div className="brand-film-frame">
                 <span className="film-kicker">OWN THE FRAME / STUDY 001</span>
                 <div className="film-title">A cut is<br /><em>a choice.</em></div>
                 <div className="film-sun" />
@@ -150,9 +149,8 @@ export default function Home() {
                 <span className="film-timecode">00:01:24:08</span>
               </div>
               <div className="brand-film-caption">
-                <span className="film-play-mark">▶</span>
-                <span>{reelNote ? "A real showreel is coming soon." : "A point of view, in every frame."}</span>
-                <button onClick={() => setReelNote(!reelNote)} aria-label="Show showreel note">↗</button>
+                <span className="film-play-mark" aria-hidden="true">OT</span>
+                <span>Showreel preview coming soon · A point of view in every frame.</span>
               </div>
             </div>
           </div>
@@ -189,7 +187,13 @@ export default function Home() {
             {courses.map((course, index) => (
               <article className={`card featured-course course-${course.slug}`} key={course.id}>
                 <div className="course-card-top"><div className="tag">{course.tag}</div><span className="course-index">{String(index + 1).padStart(2, "0")}</span></div>
-                <div className="course-art" data-swarm-media="course-art" style={course.thumbnail ? { backgroundImage: `linear-gradient(0deg,rgba(8,12,11,.35),rgba(8,12,11,.05)),url("${course.thumbnail}")` } : undefined}>
+                <div
+                  className="course-art"
+                  data-swarm-media={course.thumbnail && index === 0 ? "course-preview" : undefined}
+                  data-swarm-trigger={course.thumbnail && index === 0 ? "hover" : undefined}
+                  tabIndex={course.thumbnail && index === 0 ? 0 : undefined}
+                  style={course.thumbnail ? { backgroundImage: `linear-gradient(0deg,rgba(8,12,11,.35),rgba(8,12,11,.05)),url("${course.thumbnail}")` } : undefined}
+                >
                   <span aria-hidden="true">{course.visual}</span><i aria-hidden="true" /><b aria-hidden="true" />
                 </div>
                 <div className="course-card-copy">
@@ -239,7 +243,7 @@ export default function Home() {
             <div className="student-showcase-grid">
               {selectedShowcase.slice(0, 3).map((item) => (
                 <article className="student-project-card" key={item.id}>
-                  <a className="student-project-link" data-swarm-media="showcase-preview" href={item.url} target="_blank" rel="noreferrer">
+                  <a className="student-project-link" href={item.url} target="_blank" rel="noreferrer">
                     <span className="student-project-icon">▶</span><span>VIEW PROJECT ↗</span>
                   </a>
                   <div className="student-project-copy">
@@ -265,7 +269,7 @@ export default function Home() {
       <section id="free-course" className="container section">
         <Reveal>
           <div className="free-course-banner">
-            <div className="free-course-art" data-swarm-media="free-course-art" aria-hidden="true"><span>VOICE</span><i /><b>FREE<br />LESSONS</b></div>
+            <div className="free-course-art" aria-hidden="true"><span>VOICE</span><i /><b>FREE<br />LESSONS</b></div>
             <div className="free-course-copy">
               <span className="eyebrow">08 / START FREE · 8 LESSONS</span>
               <h2>Find the voice in your edit.</h2>

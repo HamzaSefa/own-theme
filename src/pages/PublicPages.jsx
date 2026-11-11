@@ -52,6 +52,82 @@ function PageIntro({ eyebrow, title, description }) {
   );
 }
 
+function getProjectMedia(url) {
+  try {
+    const parsedUrl = new URL(url);
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) return null;
+
+    if (/\.(mp4|webm|ogg)$/i.test(parsedUrl.pathname)) {
+      return { type: "video", src: parsedUrl.href };
+    }
+
+    const host = parsedUrl.hostname.toLowerCase().replace(/^www\./, "");
+    if (host === "youtu.be" || host === "youtube.com" || host === "m.youtube.com") {
+      const videoId = host === "youtu.be"
+        ? parsedUrl.pathname.split("/").filter(Boolean)[0]
+        : parsedUrl.searchParams.get("v") || parsedUrl.pathname.match(/^\/embed\/([^/]+)/)?.[1];
+      if (videoId && /^[\w-]{11}$/.test(videoId)) {
+        return {
+          type: "embed",
+          src: `https://www.youtube-nocookie.com/embed/${videoId}`,
+          thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+        };
+      }
+    }
+
+    if (host === "vimeo.com" || host === "player.vimeo.com") {
+      const videoId = parsedUrl.pathname.match(/\/(?:video\/)?(\d+)/)?.[1];
+      if (videoId) return { type: "embed", src: `https://player.vimeo.com/video/${videoId}` };
+    }
+
+    return { type: "external", src: parsedUrl.href };
+  } catch {
+    return null;
+  }
+}
+
+function ProjectPlayer({ project, compact = false }) {
+  const media = getProjectMedia(project.url || project.mediaUrl);
+  const poster = project.thumbnailUrl || project.thumbnail;
+
+  if (!media || media.type === "external") {
+    return compact
+      ? <div className="showcase-project-placeholder"><span aria-hidden="true">↗</span><small>PROJECT PREVIEW</small></div>
+      : <a href={media?.src || project.url} target="_blank" rel="noreferrer" className="showcase-detail-external">
+        <span className="showcase-detail-play" aria-hidden="true">↗</span>
+        <span>Open the project on its original platform ↗</span>
+      </a>;
+  }
+
+  if (media.type === "video") {
+    return <video
+      className={compact ? "showcase-project-video" : "showcase-detail-video"}
+      src={media.src}
+      poster={poster}
+      controls={!compact}
+      muted={compact}
+      playsInline
+      preload="metadata"
+      aria-label={compact ? `${project.title} video thumbnail` : `${project.title} project video`}
+      tabIndex={compact ? -1 : undefined}
+    />;
+  }
+
+  return compact
+    ? poster || media.thumbnail
+      ? <img className="showcase-project-thumbnail" src={poster || media.thumbnail} alt="" loading="lazy" />
+      : <div className="showcase-project-placeholder"><span aria-hidden="true">▶</span><small>VIDEO PROJECT</small></div>
+    : <iframe
+      className="showcase-detail-embed"
+      src={media.src}
+      title={`${project.title} video`}
+      loading="lazy"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+      referrerPolicy="strict-origin-when-cross-origin"
+      allowFullScreen
+    />;
+}
+
 function SupportContactForm({ supportEmail }) {
   const [contactEmail, setContactEmail] = useState("");
   const [contactSubject, setContactSubject] = useState("");
@@ -99,16 +175,6 @@ function hasConfirmedMembershipTerms(plans) {
 export function CoursesPage() {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All courses");
-  const siteSettings = readAdminData(adminStorageKeys.settings, {});
-  const categories = [
-    "All courses",
-    ...(siteSettings.categories?.length ? siteSettings.categories : [
-      "Short-Form & Social Media",
-      "Long-Form & YouTube",
-      "Film & Documentary",
-    ]),
-    "Free Mini-Course",
-  ];
   const catalogEntries = useMemo(() => [
     ...courses.filter(isPublicCourse).map((item) => ({
       ...getPublicCourseData(item),
@@ -127,6 +193,7 @@ export function CoursesPage() {
       description: "Explore how sound shapes an edit and draft your first Theme Sheet.",
     },
   ], []);
+  const categories = ["All courses", ...new Set(catalogEntries.map((course) => course.category).filter(Boolean))];
   const filteredCourses = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return catalogEntries.filter((course) => {
@@ -210,42 +277,56 @@ export function CoursesPage() {
               if (course.free) {
                 return (
                   <article className="card catalog-card catalog-course-free" key={course.id}>
-                    <div className="catalog-card-art" data-swarm-media="course-art" role="img" aria-label="Voice mini-course artwork">
+                    <div className="catalog-card-art catalog-card-art-free" role="img" aria-label="Voice mini-course artwork">
                       <span>FREE / VOICE</span><i />
                     </div>
                     <div className="catalog-card-content">
-                      <span className="tag">{course.tag}</span>
+                      <span className="catalog-card-category">{course.category}</span>
                       <h3>{course.title}</h3>
                       <p>{course.description}</p>
-                      <div className="catalog-meta-row"><span>Level</span><strong>Beginner-friendly</strong></div>
-                      <div className="catalog-meta-row"><span>Lessons</span><strong>8 guided lessons</strong></div>
+                      <div className="catalog-card-metadata">
+                        <span>Beginner-friendly</span>
+                        <span>8 lessons</span>
+                      </div>
                       <div className="catalog-bottom">
                         <span className="catalog-free-label">Free</span>
-                        <Link className="btn btn-primary" to="/free-course">View Course <span aria-hidden="true">↗</span></Link>
+                        <Link className="btn btn-primary" to="/free-course">Start learning <span aria-hidden="true">↗</span></Link>
                       </div>
                     </div>
                   </article>
                 );
               }
               const lessonCount = course.modules.reduce((total, module) => total + module.lessons.length, 0);
+              const duration = course.estimatedDuration || info?.hours;
               const subscriptionOnly = course.purchaseOption === "Subscription included";
               const coursePrice = course.price !== "" && course.price != null ? course.price : prices[course.id];
+              const featuredPreview = course.id === publicCourses[0]?.id && Boolean(course.thumbnail);
               return (
                 <article className={`card catalog-card catalog-course-${course.id}`} key={course.id}>
-                  <div className="catalog-card-art" data-swarm-media="course-art" role="group" aria-label={`${course.title} thumbnail`} style={course.thumbnail ? { backgroundImage: `linear-gradient(0deg,rgba(8,12,11,.35),rgba(8,12,11,.05)),url("${course.thumbnail}")` } : undefined}>
-                    <span aria-hidden="true">0{index + 1} / OWN THE FRAME</span><i aria-hidden="true" />
-                  </div>
+                  <Link to={`/courses/${course.slug || course.id}`} className="catalog-card-art" aria-label={`View ${course.title} course`}>
+                    {course.thumbnail
+                      ? <img className="catalog-card-thumbnail" data-swarm-media={featuredPreview ? "course-preview" : undefined} data-swarm-trigger={featuredPreview ? "hover" : undefined} src={course.thumbnail} alt="" aria-hidden="true" />
+                      : <span className="catalog-card-art-placeholder" aria-hidden="true">{course.tag || `COURSE 0${index + 1}`}</span>}
+                    <span className="catalog-card-art-label" aria-hidden="true">{course.category || course.tag}</span>
+                    <span className="catalog-card-preview-action" aria-hidden="true">View course <b>↗</b></span>
+                    <i aria-hidden="true" />
+                  </Link>
                   <div className="catalog-card-content">
-                    <span className="tag">{course.tag}</span>
+                    <div className="catalog-card-heading">
+                      <span className="catalog-card-category">{course.category || course.tag}</span>
+                      {course.level && <span className="catalog-card-level">{course.level}</span>}
+                    </div>
                     <h3>{course.title}</h3>
                     <p>{course.description || info?.promise || "Build a style of your own with practical, project-based editing lessons."}</p>
-                    <div className="catalog-meta-row"><span>Level</span><strong>{course.level || "Not specified"}</strong></div>
-                    {course.estimatedDuration && <div className="catalog-meta-row"><span>Estimated duration</span><strong>{course.estimatedDuration}</strong></div>}
-                    <div className="catalog-meta-row"><span>Lessons</span><strong>{lessonCount || "Not specified"}{lessonCount ? " lessons" : ""}</strong></div>
-                    {info?.software && <div className="catalog-software"><span>SOFTWARE</span>{info.software}</div>}
+                    <div className="catalog-card-metadata" aria-label="Course details">
+                      {lessonCount > 0 && <span>{lessonCount} lessons</span>}
+                      {duration && <span>{duration}</span>}
+                    </div>
+                    {course.instructor && <p className="catalog-card-instructor"><span>Instructor</span>{course.instructor}</p>}
+                    {info?.software && <p className="catalog-card-software"><span>TOOLS</span>{info.software}</p>}
                     <div className="catalog-bottom">
-                      <span className="price">{subscriptionOnly ? "Membership" : coursePrice != null ? `$${coursePrice}` : "Price not set"}<small>{subscriptionOnly ? " access" : " one-time"}</small></span>
-                      <Link className="btn btn-primary" to={subscriptionOnly ? "/plans" : `/courses/${course.slug || course.id}`}>{subscriptionOnly ? "View Plans" : "View Course"} <span aria-hidden="true">↗</span></Link>
+                      <span className="price">{subscriptionOnly ? "Membership" : coursePrice != null ? `USD ${coursePrice}` : "Price not set"}<small>{subscriptionOnly ? " access" : coursePrice != null ? " · one-time" : ""}</small></span>
+                      <Link className="btn btn-primary" to={subscriptionOnly ? "/plans" : `/courses/${course.slug || course.id}`}>{subscriptionOnly ? "View plans" : "View course"} <span aria-hidden="true">↗</span></Link>
                     </div>
                   </div>
                 </article>
@@ -262,7 +343,7 @@ export function CoursesPage() {
       </section>
 
       <section className="catalog-free-promo">
-        <div className="catalog-free-art" data-swarm-media="free-course-art" aria-hidden="true"><span>VOICE</span><i>FREE / 08 LESSONS</i></div>
+        <div className="catalog-free-art" aria-hidden="true"><span>VOICE</span><i>FREE / 08 LESSONS</i></div>
         <div>
           <span className="eyebrow">TRY THE METHOD</span>
           <h2>Start with sound. Find your editing voice.</h2>
@@ -482,32 +563,38 @@ export function ShowcasePage() {
     student: true,
   }));
   const [activeCategory, setActiveCategory] = useState("All projects");
-  const categories = ["All projects", "Short-Form & Social Media", "Long-Form & YouTube", "Film & Documentary", "Student projects"];
   const brandProjects = showcase.map((project) => ({ ...project, student: false }));
   const allProjects = [...brandProjects, ...published];
+  const categories = ["All projects", ...new Set(allProjects.map((project) => project.category).filter(Boolean))];
   const filteredProjects = activeCategory === "All projects"
     ? allProjects
-    : activeCategory === "Student projects"
-      ? published
-      : allProjects.filter((project) => project.category === activeCategory
-        );
-  const featuredProject = showcase[0];
+    : allProjects.filter((project) => project.category === activeCategory);
+  const featuredProject = published[0] || showcase[0];
 
   return (
     <main className="container public-page showcase-page">
       <PageIntro
         eyebrow="OWN THE FRAME / SHOWCASE"
-        title="Every edit begins with a choice."
-        description="Explore concept studies that reveal the thinking behind an edit, and student projects shared with permission. The work matters; so does the process that shaped it."
+        title="Selected work that tells a story."
+        description="Explore projects shaped by editing, pacing, color, sound, and storytelling. Student work appears only with creator consent and instructor approval."
       />
       <section className="showcase-featured" aria-labelledby="featured-project-title">
-        <div className="showcase-featured-art" data-swarm-media="featured-showcase-art"><span>OWN THE FRAME / BRAND STUDY 01</span><i /><b>01 — PRESSURE<br />02 — RELEASE</b></div>
+        <div className={`showcase-featured-media${featuredProject.student ? " has-video" : ""}`}>
+          {featuredProject.student ? (
+            <ProjectPlayer project={featuredProject} />
+          ) : (
+            <div className="showcase-featured-art" data-swarm-media="portfolio-feature" data-swarm-trigger="viewport" data-swarm-replay>
+              <span>OWN THE FRAME / CONCEPT STUDY</span><i /><b>01 — PRESSURE<br />02 — RELEASE</b>
+              <button className="swarm-replay-control" type="button" data-swarm-replay-control aria-label="Replay the featured project visual rebuild">Replay</button>
+            </div>
+          )}
+        </div>
         <div className="showcase-featured-copy">
-          <span className="eyebrow">FEATURED PROJECT · OWN THEME CONCEPT STUDY</span>
+          <span className="eyebrow">{featuredProject.student ? "FEATURED STUDENT PROJECT · SHARED WITH PERMISSION" : "FEATURED OWN THEME CONCEPT STUDY"}</span>
           <h2 id="featured-project-title">{featuredProject.title}</h2>
           <p>{featuredProject.goal}</p>
           <Link to={`/showcase/${featuredProject.slug}`} className="text-link">Explore the creative process <span aria-hidden="true">↗</span></Link>
-          <small>Brand example · not a student result</small>
+          <small>{featuredProject.student ? "Student work · creator consent recorded" : "Concept study · not a student result"}</small>
         </div>
       </section>
 
@@ -523,20 +610,28 @@ export function ShowcasePage() {
         </div>
         {filteredProjects.length ? (
           <div className="showcase-project-grid">
-            {filteredProjects.map((project, index) => (
-              <article className={`showcase-project-card${project.student ? " student-project" : ""}`} key={project.slug}>
-                <Link to={`/showcase/${project.slug}`} className="showcase-project-art" data-swarm-media="showcase-art" aria-label={`View project ${project.title}`}>
-                  <span>{project.student ? "STUDENT PROJECT · SHARED WITH PERMISSION" : `OWN THE FRAME / STUDY 0${index + 1}`}</span><i /><b aria-hidden="true">↗</b>
-                </Link>
-                <div className="showcase-project-copy">
-                  <span className="eyebrow">{project.format}</span>
-                  <h3><Link to={`/showcase/${project.slug}`}>{project.title}</Link></h3>
-                  <p>{project.goal}</p>
-                  <div className="showcase-project-meta">{project.student ? "Student contributor · profile not shared" : "Own Theme brand example"}</div>
-                  <Link to={`/showcase/${project.slug}`} className="text-link">Project details <span aria-hidden="true">↗</span></Link>
-                </div>
-              </article>
-            ))}
+            {filteredProjects.map((project, index) => {
+              const swarmEligible = (!project.student && index < 2)
+                || (project.student && project.slug === published[0]?.slug);
+              return (
+                <article className={`showcase-project-card${project.student ? " student-project" : ""}`} key={project.slug}>
+                  <Link to={`/showcase/${project.slug}`} className="showcase-project-art" data-swarm-media={swarmEligible ? "portfolio-project" : undefined} data-swarm-trigger={swarmEligible ? "viewport" : undefined} data-swarm-replay={swarmEligible ? "" : undefined} aria-label={`View project ${project.title}`}>
+                    <ProjectPlayer project={project} compact />
+                    <span>{project.student ? "STUDENT PROJECT · SHARED WITH PERMISSION" : `OWN THE FRAME / STUDY 0${index + 1}`}</span><i /><b className="showcase-project-play" aria-hidden="true">▶</b>
+                  </Link>
+                  {swarmEligible && <button className="swarm-replay-control" type="button" data-swarm-replay-control aria-label={`Replay ${project.title} visual rebuild`}>Replay</button>}
+                  <div className="showcase-project-copy">
+                    <span className="eyebrow">{project.student ? `${project.category} · ${project.format}` : project.format}</span>
+                    <h3><Link to={`/showcase/${project.slug}`}>{project.title}</Link></h3>
+                    <p>{project.goal}</p>
+                    {project.techniques?.length > 0 && <ul className="showcase-technique-list">{project.techniques.map((technique) => <li key={technique}>{technique}</li>)}</ul>}
+                    {(project.duration || project.software) && <div className="showcase-project-meta">{[project.duration, project.software].filter(Boolean).join(" · ")}</div>}
+                    <div className="showcase-project-meta">{project.student ? "Student contributor · shared with permission" : "Own Theme concept study"}</div>
+                    <Link to={`/showcase/${project.slug}`} className="text-link">Project details <span aria-hidden="true">↗</span></Link>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         ) : (
           <div className="showcase-empty">
@@ -622,12 +717,9 @@ export function ShowcaseProjectPage() {
       </header>
       <section className="showcase-detail-media">
         {project.student ? (
-          <a href={project.url} target="_blank" rel="noreferrer" className="showcase-detail-external">
-            <span className="showcase-detail-play">▶</span>
-            <span>Open the student’s project ↗</span>
-          </a>
+          <ProjectPlayer project={project} />
         ) : (
-          <div className="showcase-detail-brand-art" data-swarm-media="showcase-art"><span>OWN THE FRAME / CREATIVE STUDY</span><i /><b>{project.title}</b><small>Illustrative brand example · final edit preview unavailable</small></div>
+          <div className="showcase-detail-brand-art" data-swarm-media="portfolio-project" data-swarm-trigger="viewport" data-swarm-replay><span>OWN THE FRAME / CREATIVE STUDY</span><i /><b>{project.title}</b><small>Illustrative brand example · final edit preview unavailable</small><button className="swarm-replay-control" type="button" data-swarm-replay-control aria-label={`Replay ${project.title} visual rebuild`}>Replay</button></div>
         )}
       </section>
       <div className="showcase-detail-columns">
@@ -767,7 +859,7 @@ export function FreeMiniCoursePage() {
         description="Try the Own Theme approach before choosing a full course. Lesson titles, final learning outcomes, and the enrollment/access rules are awaiting confirmation."
       />
       <section className="free-course-intro-panel">
-        <div className="free-course-intro-art" data-swarm-media="free-course-art" aria-hidden="true"><span>VOICE</span><i /><b>FREE<br />PREVIEW</b></div>
+        <div className="free-course-intro-art" aria-hidden="true"><span>VOICE</span><i /><b>FREE<br />PREVIEW</b></div>
         <div className="free-course-intro-copy">
           <span className="eyebrow">A FIRST TASTE OF THE METHOD</span>
           <h2>Make creative choices with intention.</h2>

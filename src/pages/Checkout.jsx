@@ -43,7 +43,7 @@ export default function Checkout() {
             <article className="plans-course-card" key={item.id}>
               <span className="eyebrow">{item.tag}</span>
               <h2>{item.title}</h2>
-              <div className="plans-course-price">{item.price !== "" && item.price != null ? `$${item.price}` : prices[item.id] != null ? `$${prices[item.id]}` : "Price not set"}<small> one-time</small></div>
+              <div className="plans-course-price">{item.price !== "" && item.price != null ? `USD ${item.price}` : prices[item.id] != null ? `USD ${prices[item.id]}` : "Price not set"}<small> one-time</small></div>
               <Link to={`/checkout/${item.id}`} className="text-link">Review course <span aria-hidden="true">↗</span></Link>
             </article>
           ))}

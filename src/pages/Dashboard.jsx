@@ -180,7 +180,7 @@ export default function Dashboard() {
             </Link>
           )}
         </div>
-        <div className="student-workspace-art" data-swarm-media="student-dashboard-art" aria-hidden="true">
+        <div className="student-workspace-art" aria-hidden="true">
           <span className="student-art-frame student-art-frame-back" />
           <span className="student-art-frame student-art-frame-front">
             <i />
@@ -205,25 +205,31 @@ export default function Dashboard() {
               const progress = getCourseProgress(course, completed);
               return (
                 <article className="student-enrolled-card" key={course.id}>
-                  <span className="eyebrow">{course.tag}</span>
-                  <h3>{course.title}</h3>
-                  <div className="student-progress-label">
-                    <span>{completed.length} of {lessons.length} lessons</span>
-                    <span>{progress}%</span>
+                  <div className={`student-enrolled-card-art student-owned-course-art-${course.id}`}>
+                    {(course.thumbnail || course.heroImage) && <img src={course.thumbnail || course.heroImage} alt="" loading="lazy" decoding="async" />}
+                    <span>{course.tag}</span>
+                    <i aria-hidden="true" />
                   </div>
-                  <div
-                    className="student-progress-track"
-                    role="progressbar"
-                    aria-label={`${course.title} progress`}
-                    aria-valuemin="0"
-                    aria-valuemax="100"
-                    aria-valuenow={progress}
-                  >
-                    <span style={{ width: `${progress}%` }} />
+                  <div className="student-enrolled-card-content">
+                    <h3>{course.title}</h3>
+                    <div className="student-progress-label">
+                      <span>{completed.length} of {lessons.length} lessons</span>
+                      <span>{progress}%</span>
+                    </div>
+                    <div
+                      className="student-progress-track"
+                      role="progressbar"
+                      aria-label={`${course.title} progress`}
+                      aria-valuemin="0"
+                      aria-valuemax="100"
+                      aria-valuenow={progress}
+                    >
+                      <span style={{ width: `${progress}%` }} />
+                    </div>
+                    <Link to={`/app/learn/${next.id}`} className="text-link">
+                      {progress === 100 ? "Review course" : "Continue course"} <span aria-hidden="true">→</span>
+                    </Link>
                   </div>
-                  <Link to={`/app/learn/${next.id}`} className="text-link">
-                    {progress === 100 ? "Review course" : "Continue course"} <span aria-hidden="true">→</span>
-                  </Link>
                 </article>
               );
             })}

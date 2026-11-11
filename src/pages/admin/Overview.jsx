@@ -59,10 +59,10 @@ export default function Overview() {
   ].sort((a, b) => b.date - a.date).slice(0, 6);
 
   const stats = [
-    ["Student accounts", studentCount],
-    ["Published courses", publishedCourses.length],
-    ["Pending order reviews", pendingOrders.length],
-    ["Assignments awaiting review", awaitingReview.length],
+    { label: "Student accounts", count: studentCount, icon: "users" },
+    { label: "Published courses", count: publishedCourses.length, icon: "courses" },
+    { label: "Pending order reviews", count: pendingOrders.length, icon: "orders" },
+    { label: "Assignments awaiting review", count: awaitingReview.length, icon: "assignments" },
   ];
 
   return (
@@ -71,8 +71,16 @@ export default function Overview() {
         <div><h1>Admin overview</h1><p className="muted">A snapshot of records currently stored in this preview.</p></div>
       </div>
       <div className="stat-grid">
-        {stats.map(([label, count]) => (
-          <div className="stat" key={label}><small>{label}</small><strong>{count}</strong></div>
+        {stats.map(({ label, count, icon }) => (
+          <div className="stat admin-stat" key={label}>
+            <span className={`admin-stat-icon admin-stat-icon-${icon}`} aria-hidden="true">
+              {icon === "users" ? <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="10" cy="7" r="4" /><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+                : icon === "courses" ? <svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v17H6.5A2.5 2.5 0 0 1 4 17.5z" /><path d="M4 17.5A2.5 2.5 0 0 1 6.5 15H20" /></svg>
+                  : icon === "orders" ? <svg viewBox="0 0 24 24"><path d="M4 3v18l3-2 3 2 3-2 3 2 4-2V3l-4 2-3-2-3 2-3-2z" /><path d="M8 9h8M8 13h8" /></svg>
+                    : <svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="16" rx="2" /><path d="M9 5V3h6v2M9 11h6M9 15h6" /></svg>}
+            </span>
+            <small>{label}</small><strong>{count}</strong>
+          </div>
         ))}
       </div>
       <p className="admin-disclaimer">These are browser-local preview records, not verified production accounts or payments. No demo sales, monthly figures, or completion estimates are included.</p>
