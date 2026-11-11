@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { courses, getCurrentEnrollments, getAllLessons, getProgress, saveProgress } from "../data/courses";
-import { getCurrentUser, readStudentData } from "../data/studentPortal";
+import { getCurrentUser, getUserSubmissions, readStudentData } from "../data/studentPortal";
 
 const VIDEO_PROGRESS_KEY = "ownTheme_video_progress";
 
@@ -21,6 +21,16 @@ function findLesson(courseId, lessonId) {
 
 function getLessonModule(course, lessonId) {
   return course.modules.find((module) => module.lessons?.some((lesson) => lesson.id === lessonId));
+}
+
+function getModuleAssignments(module) {
+  if (!module) return [];
+  if (Array.isArray(module.assignments)) return module.assignments;
+  if (module.assignment) return [module.assignment];
+  if (module.assignmentTitle) {
+    return [{ title: module.assignmentTitle, description: module.assignmentDescription }];
+  }
+  return [];
 }
 
 function readVideoPositions() {
@@ -62,6 +72,24 @@ function LessonPlayer({ resolved, enrollment }) {
   const module = getLessonModule(course, lesson.id);
   const moduleIndex = course.modules.findIndex((item) => item === module);
   const moduleLessonIndex = (module?.lessons || []).findIndex((item) => item.id === lesson.id);
+  const lessonAssignments = getModuleAssignments(module).map((assignment, assignmentIndex) => {
+    const data = typeof assignment === "string" ? { title: assignment } : assignment;
+    return {
+      ...data,
+      id: String(data.id || `${course.id}-${moduleIndex}-${assignmentIndex}`),
+      title: data.title || "Module assignment",
+    };
+  });
+  const submissions = getUserSubmissions();
+  const lessonSubmissions = submissions.filter((submission) =>
+    submission.courseId === course.id
+    && (
+      submission.lessonId === lesson.id
+      || lessonAssignments.some((assignment) =>
+        assignment.id === submission.assignmentId || assignment.title === submission.title
+      )
+    )
+  );
   const hasNotes = Boolean(lesson.notes || lesson.description || lesson.content);
   const notes = lesson.notes || lesson.description || lesson.content;
 
@@ -189,7 +217,6 @@ function LessonPlayer({ resolved, enrollment }) {
             ) : <span />}
           </div>
           <p className="lesson-save-notice">Lesson completion and playback position are saved in this browser preview. Backend sync is not connected.</p>
-          <p className="admin-disclaimer">Demo only: videos are not protected by secure streaming or signed links. Do not add private media until server-side access control is connected.</p>
 
           <div className="lesson-learning-content">
             <section className="lesson-content-section">
@@ -215,6 +242,21 @@ function LessonPlayer({ resolved, enrollment }) {
               )}
             </section>
 
+            <section className="lesson-content-section lesson-related-assignment">
+              <span className="eyebrow">RELATED ASSIGNMENT</span>
+              <h2>{lessonAssignments.length ? lessonAssignments[0].title || "Module assignment" : "No assignment linked yet"}</h2>
+              {lessonAssignments.length ? (
+                <>
+                  <p>{lessonAssignments[0].instructions || lessonAssignments[0].description || "Review the assignment brief in your assignment workspace."}</p>
+                  {lessonSubmissions.length > 0 && (
+                    <span className="status-pill">{lessonSubmissions[0].status || "Submitted"}</span>
+                  )}
+                </>
+              ) : (
+                <p>This course has not linked an assignment to this lesson yet.</p>
+              )}
+              <Link to="/app/assignments" className="text-link">Open assignments <span aria-hidden="true">↗</span></Link>
+            </section>
           </div>
         </main>
 
