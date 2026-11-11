@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
+import SwarmRebuild from "../components/SwarmRebuild";
 import { courses, getCurrentEnrollments, getAllLessons, getProgress, saveProgress } from "../data/courses";
 import { getCurrentUser, getUserSubmissions, readStudentData } from "../data/studentPortal";
 
@@ -176,6 +177,7 @@ function LessonPlayer({ resolved, enrollment }) {
                   )}
                   Your browser does not support video playback.
                 </video>
+                <SwarmRebuild label="lesson video preview" video />
                 {mediaError && (
                   <div className="lesson-media-error" role="alert">
                     <strong>Video unavailable</strong>

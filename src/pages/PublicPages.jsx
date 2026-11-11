@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import SwarmRebuild from "../components/SwarmRebuild";
 import { courses, getPublicCourseData, isPublicCourse } from "../data/courses";
 import { details, faq } from "../data/details";
 import { prices } from "../data/admin";
@@ -232,8 +233,9 @@ export function CoursesPage() {
               const coursePrice = course.price !== "" && course.price != null ? course.price : prices[course.id];
               return (
                 <article className={`card catalog-card catalog-course-${course.id}`} key={course.id}>
-                  <div className="catalog-card-art" role="img" aria-label={`${course.title} course thumbnail`} style={course.thumbnail ? { backgroundImage: `linear-gradient(0deg,rgba(8,12,11,.35),rgba(8,12,11,.05)),url("${course.thumbnail}")` } : undefined}>
-                    <span>0{index + 1} / OWN THE FRAME</span><i />
+                  <div className="catalog-card-art" role="group" aria-label={`${course.title} thumbnail`} style={course.thumbnail ? { backgroundImage: `linear-gradient(0deg,rgba(8,12,11,.35),rgba(8,12,11,.05)),url("${course.thumbnail}")` } : undefined}>
+                    <span aria-hidden="true">0{index + 1} / OWN THE FRAME</span><i aria-hidden="true" />
+                    {course.thumbnail && <SwarmRebuild label={`${course.title} thumbnail`} />}
                   </div>
                   <div className="catalog-card-content">
                     <span className="tag">{course.tag}</span>

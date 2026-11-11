@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import Reveal from "../components/Reveal";
+import SwarmRebuild from "../components/SwarmRebuild";
 import { courses as courseCatalog, getPublicCourseData, isPublicCourse } from "../data/courses";
 import { adminStorageKeys, getAdminPlans, isAvailableBundle, readAdminData } from "../data/adminWorkspace";
 import { faq } from "../data/details";
@@ -118,6 +119,7 @@ export default function Home() {
                 <span className="visual-caption-line" />
                 <span>OWN THE FRAME</span>
               </div>
+              <SwarmRebuild label="homepage image" />
             </div>
           </section>
         </div>
@@ -189,7 +191,10 @@ export default function Home() {
             {courses.map((course, index) => (
               <article className={`card featured-course course-${course.slug}`} key={course.id}>
                 <div className="course-card-top"><div className="tag">{course.tag}</div><span className="course-index">{String(index + 1).padStart(2, "0")}</span></div>
-                <div className="course-art" aria-hidden="true" style={course.thumbnail ? { backgroundImage: `linear-gradient(0deg,rgba(8,12,11,.35),rgba(8,12,11,.05)),url("${course.thumbnail}")` } : undefined}><span>{course.visual}</span><i /><b /></div>
+                <div className="course-art" style={course.thumbnail ? { backgroundImage: `linear-gradient(0deg,rgba(8,12,11,.35),rgba(8,12,11,.05)),url("${course.thumbnail}")` } : undefined}>
+                  <span aria-hidden="true">{course.visual}</span><i aria-hidden="true" /><b aria-hidden="true" />
+                  {course.thumbnail && <SwarmRebuild label={`${course.title} thumbnail`} />}
+                </div>
                 <div className="course-card-copy">
                   <h3>{course.title}</h3>
                   <p>{course.desc}</p>
