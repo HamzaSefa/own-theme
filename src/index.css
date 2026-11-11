@@ -552,6 +552,14 @@ h1, h2, h3, h4, .logo, .price, .stat strong {
 .section-heading .section-title { margin: 0 0 16px; font-size: clamp(30px, 4vw, 44px); line-height: 1.15; }
 .section-heading .section-sub { max-width: 650px; margin: 0 auto; line-height: 1.7; }
 .method-section, .courses-section, .home-showcase-section, .pricing-section, .home-faq-section { padding-top: 34px; }
+.home-faq-section .section-heading { max-width: 760px; }
+.home-faq-section .section-sub { max-width: 42ch; }
+@media (max-width: 600px) {
+  .home-faq-section { padding-top: 22px; }
+  .home-faq-section .section-heading { margin-bottom: 28px; }
+  .home-faq-section .section-heading .section-title { max-width: 13ch; margin: 0 auto 10px; font-size: clamp(27px, 8vw, 34px); line-height: 1.12; letter-spacing: -.025em; }
+  .home-faq-section .section-sub { max-width: 34ch; padding: 0 8px; font-size: 14px; line-height: 1.6; }
+}
 .method-section .stack-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .stack-item { min-height: 164px; transition: border-color .2s, transform .2s; }
 .stack-item:hover { transform: translateY(-3px); border-color: rgba(255, 122, 0, .48); }
@@ -1120,6 +1128,19 @@ h1, h2, h3, h4, .logo, .price, .stat strong {
 .about-stack-grid h3 { margin: 7px 0 5px; font-size: 17px; }
 .about-stack-grid p { color: var(--muted); font-size: 12px; }
 .about-page .about-panel { margin-top: 54px; }
+.about-team-section { max-width: 1000px; margin: 64px auto 0; }
+.about-team-heading { margin-bottom: 20px; }
+.about-team-heading .eyebrow { margin-bottom: 7px; }
+.about-team-heading h2 { font-size: clamp(24px, 3.2vw, 34px); line-height: 1.15; }
+.about-team-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 18px; }
+.about-team-grid .about-panel { grid-template-columns: 90px minmax(0, 1fr); align-content: center; gap: 20px; width: 100%; max-width: none; min-width: 0; margin: 0; padding: 24px; border-radius: 18px; }
+.about-team-grid .avatar { width: 90px; height: 90px; font-size: 36px; }
+.about-panel h3 { margin: 8px 0; font-size: 24px; line-height: 1.2; }
+.about-team-coming { display: grid; align-content: center; justify-items: start; gap: 10px; min-width: 0; padding: 28px; border: 1px dashed rgba(249,115,22,.35); border-radius: 18px; background: radial-gradient(ellipse at 100% 0,rgba(249,115,22,.09),transparent 55%),var(--card); }
+.about-team-coming-mark { display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid rgba(249,115,22,.28); border-radius: 13px; background: rgba(249,115,22,.08); color: #f0a36f; font-size: 12px; font-weight: 750; letter-spacing: .08em; }
+.about-team-coming .eyebrow { margin-top: 3px; font-size: 9px; }
+.about-team-coming h3 { margin: -7px 0 0; font-size: 23px; }
+.about-team-coming p { max-width: 36ch; color: var(--muted); font-size: 14px; }
 .about-process-section { max-width: 800px; margin: 68px auto 0; }
 .about-process-section .plans-section-heading { text-align: center; }
 .about-process-steps { display: grid; gap: 0; list-style: none; }
@@ -1134,6 +1155,7 @@ h1, h2, h3, h4, .logo, .price, .stat strong {
 @media (max-width: 850px) {
   .showcase-project-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .showcase-before-after { grid-template-columns: 1fr; }
+  .about-team-grid { grid-template-columns: 1fr; }
   .showcase-ba-card { grid-template-columns: minmax(100px,.65fr) 1fr 1fr; }
   .showcase-ba-card .text-link { grid-column: 2 / -1; }
   .about-stack-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
@@ -1282,6 +1304,10 @@ h1, h2, h3, h4, .logo, .price, .stat strong {
   .public-page-intro p { font-size: 16px; }
   .about-panel { grid-template-columns: 1fr; justify-items: center; text-align: center; padding: 24px; }
   .about-panel .pills { justify-content: center; }
+  .about-team-section { margin-top: 46px; }
+  .about-team-grid .about-panel { padding: 22px; }
+  .about-team-coming { justify-items: center; padding: 24px; text-align: center; }
+  .about-team-coming p { max-width: 34ch; }
   .about-method { margin-top: 44px; }
   .free-course-panel, .contact-panel { padding: 24px; }
 }
@@ -2514,6 +2540,23 @@ a.student-module-lesson:hover { background: rgba(255,255,255,.025); color: #f0ad
   .student-platform .student-main { padding-inline: 16px; }
   .student-platform .student-page-heading { align-items: flex-start; flex-direction: column; }
   .student-platform .student-settings-page .profile-form .field { max-width: 100%; }
+}
+@media (max-width: 380px) {
+  .student-platform .student-header { padding-inline: 12px; }
+  .student-platform .student-header-user { gap: 7px; }
+  .student-platform .student-header-user > span:nth-child(2) { display: none; }
+  .student-platform .student-header-user .btn { padding-inline: 10px; }
+}
+.admin-overview-page, .admin-course-management, .admin-curriculum-management {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+.admin-curriculum-management > * { min-width: 0; }
+@media (max-width: 600px) {
+  .admin-curriculum-management .cms-row { flex-wrap: wrap; }
+  .admin-curriculum-management .cms-row > input { flex: 1 1 140px; max-width: 100%; }
+  .admin-curriculum-management .cms-row > .admin-actions-inline { flex: 1 0 100%; justify-content: flex-end; }
+  .about-team-grid .about-panel { grid-template-columns: 1fr; justify-items: center; text-align: center; }
 }
 @media (prefers-reduced-motion: reduce) {
   .admin-workspace :is(button,a), .student-platform :is(button,a),

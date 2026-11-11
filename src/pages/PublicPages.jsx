@@ -791,18 +791,32 @@ export function AboutPage() {
           ))}
         </div>
       </section>
-      <section className="about-panel">
-        <div className="avatar" aria-hidden="true">A</div>
-        <div>
-          <span className="eyebrow">FOUNDED BY</span>
-          <h2>Abdulhafiz Zekeriya</h2>
-          <p>Video editor and course creator. The Own Theme lessons focus on the creative decision first and the software steps second. Additional biography and credentials will be added when provided.</p>
-          <div className="pills">
-            <span className="pill">Premiere Pro</span>
-            <span className="pill">After Effects</span>
-            <span className="pill">DaVinci Resolve</span>
-            <span className="pill">CapCut</span>
-          </div>
+      <section className="about-team-section" aria-labelledby="about-team-title">
+        <div className="about-team-heading">
+          <span className="eyebrow">THE PEOPLE BEHIND OWN THEME</span>
+          <h2 id="about-team-title">Meet the people shaping the studio.</h2>
+        </div>
+        <div className="about-team-grid">
+          <article className="about-panel">
+            <div className="avatar" aria-hidden="true">A</div>
+            <div>
+              <span className="eyebrow">FOUNDED BY</span>
+              <h3>Abdulhafiz Zekeriya</h3>
+              <p>Video editor and course creator. The Own Theme lessons focus on the creative decision first and the software steps second. Additional biography and credentials will be added when provided.</p>
+              <div className="pills">
+                <span className="pill">Premiere Pro</span>
+                <span className="pill">After Effects</span>
+                <span className="pill">DaVinci Resolve</span>
+                <span className="pill">CapCut</span>
+              </div>
+            </div>
+          </article>
+          <article className="about-team-coming">
+            <span className="about-team-coming-mark" aria-hidden="true">OT</span>
+            <span className="eyebrow">MORE TEAM PROFILES</span>
+            <h3>Coming soon</h3>
+            <p>We’ll introduce additional team members here once their names and roles are ready.</p>
+          </article>
         </div>
       </section>
       <section className="about-process-section">
