@@ -180,7 +180,7 @@ export default function Dashboard() {
             </Link>
           )}
         </div>
-        <div className="student-workspace-art" aria-hidden="true">
+        <div className="student-workspace-art" data-swarm-media="student-dashboard-art" aria-hidden="true">
           <span className="student-art-frame student-art-frame-back" />
           <span className="student-art-frame student-art-frame-front">
             <i />

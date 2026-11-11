@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
 
 const colors = ["#ff5c8a", "#56d5ff", "#ffd166", "#8cff7a", "#c79bff", "#ff9d55", "#55f0c1", "#ff78d1"];
 const cursorCount = 6;
-const tileStagger = 85;
-const tileRevealDuration = 220;
+const tileStagger = 65;
+const tileRevealDuration = 260;
+const mediaSelector = "[data-swarm-media]";
+const maxConcurrentAnimations = 3;
 const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
 
 function makeTiles(width, height) {
@@ -42,9 +45,8 @@ function cursorPosition(index, elapsed, tiles, width, height) {
   const fromY = from.y + from.height / 2;
   const toX = to.x + to.width / 2;
   const toY = to.y + to.height / 2;
-  const sway = Math.sin(elapsed / 120 + index * 1.7) * 9;
   return {
-    x: Math.max(3, Math.min(width - 3, fromX + (toX - fromX) * progress + sway)),
+    x: Math.max(3, Math.min(width - 3, fromX + (toX - fromX) * progress + Math.sin(elapsed / 120 + index * 1.7) * 9)),
     y: Math.max(3, Math.min(height - 3, fromY + (toY - fromY) * progress + Math.cos(elapsed / 145 + index) * 8)),
   };
 }
@@ -66,195 +68,464 @@ function drawPointer(context, x, y, color) {
   context.stroke();
 }
 
-export default function SwarmRebuild({ label = "media", video = false }) {
-  const layerRef = useRef(null);
-  const maskCanvasRef = useRef(null);
-  const swarmCanvasRef = useRef(null);
-  const [phase, setPhase] = useState("idle");
-  const [status, setStatus] = useState("");
+function getMediaKey(media) {
+  if (media instanceof HTMLImageElement) {
+    const sources = [...(media.closest("picture")?.querySelectorAll("source") || [])]
+      .map((source) => `${source.getAttribute("srcset") || ""}|${source.getAttribute("media") || ""}|${source.getAttribute("type") || ""}`)
+      .join(",");
+    return `${media.getAttribute("src") || ""}|${media.getAttribute("srcset") || ""}|${sources}`;
+  }
+  if (media instanceof HTMLVideoElement) {
+    const sources = [...media.querySelectorAll("source")].map((source) => `${source.src}|${source.type}`).join(",");
+    return `${media.getAttribute("src") || ""}|${sources}|${media.getAttribute("poster") || ""}`;
+  }
+  return media.getAttribute("style") || "";
+}
+
+function isMediaReady(media) {
+  if (media instanceof HTMLImageElement) return media.complete && media.naturalWidth > 0;
+  if (media instanceof HTMLVideoElement) {
+    return Boolean(media.getAttribute("poster") || media.getAttribute("src") || media.querySelector("source"))
+      || media.readyState >= 2;
+  }
+  return media.hasAttribute("data-swarm-media");
+}
+
+function createOverlay(media, onFinish) {
+  const isVideo = media instanceof HTMLVideoElement;
+  const style = getComputedStyle(media);
+  const host = document.createElement("div");
+  host.className = "swarm-auto-layer";
+  host.setAttribute("aria-hidden", "true");
+  host.style.position = "absolute";
+  host.style.zIndex = style.zIndex === "auto" ? "1" : style.zIndex;
+  host.style.borderRadius = isVideo
+    ? `${style.borderTopLeftRadius} ${style.borderTopRightRadius} 0 0`
+    : style.borderRadius;
+  host.style.pointerEvents = "none";
+  host.style.overflow = "hidden";
+
+  const maskCanvas = document.createElement("canvas");
+  const cursorCanvas = document.createElement("canvas");
+  maskCanvas.className = "swarm-mask-canvas";
+  cursorCanvas.className = "swarm-cursor-canvas";
+  host.append(maskCanvas, cursorCanvas);
+
+  const maskContext = maskCanvas.getContext("2d");
+  const cursorContext = cursorCanvas.getContext("2d");
+  if (!maskContext || !cursorContext) {
+    console.error("Swarm Rebuild could not initialize its canvases.");
+    return null;
+  }
+
+  const containingBlock = media.offsetParent || document.body;
+  containingBlock.append(host);
+  let frameId = 0;
+  let startedAt = performance.now();
+  let width = 0;
+  let height = 0;
+  let tiles = [];
+  let revealedCount = 0;
+  let disposed = false;
+
+  function resize() {
+    const bounds = media.getBoundingClientRect();
+    const inset = isVideo ? Math.min(48, bounds.height * 0.25) : 0;
+    width = Math.max(0, bounds.width);
+    height = Math.max(0, bounds.height - inset);
+    if (!width || !height) return;
+
+    const containingBounds = containingBlock.getBoundingClientRect();
+    host.style.left = `${bounds.left - containingBounds.left + containingBlock.scrollLeft - containingBlock.clientLeft}px`;
+    host.style.top = `${bounds.top - containingBounds.top + containingBlock.scrollTop - containingBlock.clientTop}px`;
+    host.style.width = `${width}px`;
+    host.style.height = `${height}px`;
+
+    const scale = Math.min(window.devicePixelRatio || 1, 2);
+    [maskCanvas, cursorCanvas].forEach((canvas) => {
+      canvas.width = Math.ceil(width * scale);
+      canvas.height = Math.ceil(height * scale);
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      canvas.getContext("2d")?.setTransform(scale, 0, 0, scale, 0, 0);
+    });
+
+    const elapsed = Math.max(0, performance.now() - startedAt);
+    tiles = makeTiles(width, height);
+    revealedCount = Math.min(tiles.length, Math.max(0, Math.floor((elapsed - tileRevealDuration) / tileStagger) + 1));
+    maskContext.fillStyle = "#0b100f";
+    maskContext.fillRect(0, 0, width, height);
+    for (let index = 0; index < revealedCount; index += 1) {
+      const tile = tiles[index];
+      maskContext.clearRect(tile.x, tile.y, tile.width, tile.height);
+    }
+  }
+
+  function draw(now) {
+    if (disposed) return;
+    if (!width || !height || !tiles.length) {
+      resize();
+      frameId = requestAnimationFrame(draw);
+      return;
+    }
+
+    const elapsed = Math.max(0, now - startedAt);
+    while (revealedCount < tiles.length && elapsed >= revealedCount * tileStagger + tileRevealDuration) {
+      const tile = tiles[revealedCount];
+      maskContext.clearRect(tile.x, tile.y, tile.width, tile.height);
+      revealedCount += 1;
+    }
+
+    cursorContext.clearRect(0, 0, width, height);
+    tiles.forEach((tile, index) => {
+      const tileAge = elapsed - index * tileStagger;
+      if (tileAge < 0 || tileAge >= tileRevealDuration) return;
+      const progress = tileAge / tileRevealDuration;
+      const inset = 2 + (1 - progress) * 5;
+      cursorContext.globalAlpha = 1 - progress * 0.62;
+      cursorContext.strokeStyle = colors[index % colors.length];
+      cursorContext.lineWidth = 1.5;
+      cursorContext.strokeRect(tile.x + inset, tile.y + inset, Math.max(1, tile.width - inset * 2), Math.max(1, tile.height - inset * 2));
+      cursorContext.globalAlpha = 1;
+    });
+
+    for (let index = 0; index < cursorCount; index += 1) {
+      const color = colors[index % colors.length];
+      const point = cursorPosition(index, elapsed, tiles, width, height);
+      cursorContext.beginPath();
+      for (let trail = 5; trail >= 0; trail -= 1) {
+        const previous = cursorPosition(index, Math.max(0, elapsed - trail * 28), tiles, width, height);
+        if (trail === 5) cursorContext.moveTo(previous.x, previous.y);
+        else cursorContext.lineTo(previous.x, previous.y);
+      }
+      cursorContext.strokeStyle = color;
+      cursorContext.globalAlpha = 0.12;
+      cursorContext.lineWidth = 2;
+      cursorContext.stroke();
+      cursorContext.globalAlpha = 1;
+      drawPointer(cursorContext, point.x, point.y, color);
+    }
+
+    const totalDuration = (tiles.length - 1) * tileStagger + tileRevealDuration;
+    if (elapsed >= totalDuration) {
+      dispose();
+      onFinish();
+      return;
+    }
+    resizePosition();
+    frameId = requestAnimationFrame(draw);
+  }
+
+  function resizePosition() {
+    const bounds = media.getBoundingClientRect();
+    const containingBounds = containingBlock.getBoundingClientRect();
+    host.style.left = `${bounds.left - containingBounds.left + containingBlock.scrollLeft - containingBlock.clientLeft}px`;
+    host.style.top = `${bounds.top - containingBounds.top + containingBlock.scrollTop - containingBlock.clientTop}px`;
+  }
+
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    cancelAnimationFrame(frameId);
+    observer?.disconnect();
+    window.removeEventListener("resize", resize);
+    host.remove();
+  }
+
+  const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
+  if (observer) observer.observe(media);
+  else window.addEventListener("resize", resize);
+  resize();
+  frameId = requestAnimationFrame(draw);
+  return dispose;
+}
+
+export default function SwarmRebuild() {
+  const { pathname, search } = useLocation();
 
   useEffect(() => {
-    if (phase !== "running") return undefined;
+    const records = new WeakMap();
+    const activeRecords = new Set();
+    const completedRecords = new Set();
+    const queue = [];
+    let activeCount = 0;
+    let stopped = false;
+    let completedScrollFrame = 0;
+    const motionPreference = window.matchMedia(reducedMotionQuery);
 
-    const layer = layerRef.current;
-    const maskCanvas = maskCanvasRef.current;
-    const swarmCanvas = swarmCanvasRef.current;
-    const maskContext = maskCanvas?.getContext("2d");
-    const swarmContext = swarmCanvas?.getContext("2d");
-    if (!layer || !maskCanvas || !swarmCanvas || !maskContext || !swarmContext) {
-      throw new Error(`The ${label} rebuild effect could not initialize its canvas.`);
+    function releaseSlot(record) {
+      if (!record.hasSlot) return;
+      record.hasSlot = false;
+      activeCount = Math.max(0, activeCount - 1);
     }
 
-    let frameId = 0;
-    let startedAt = 0;
-    let width = 0;
-    let height = 0;
-    let tiles = [];
-    let revealedCount = 0;
-
-    function resize() {
-      const bounds = layer.getBoundingClientRect();
-      const bottomInset = video ? 48 : 0;
-      width = Math.max(0, bounds.width);
-      height = Math.max(0, bounds.height - bottomInset);
-      if (!width || !height) return;
-
-      const scale = Math.min(window.devicePixelRatio || 1, 2);
-      [maskCanvas, swarmCanvas].forEach((canvas) => {
-        canvas.width = Math.ceil(width * scale);
-        canvas.height = Math.ceil(height * scale);
-        canvas.style.width = `${width}px`;
-        canvas.style.height = `${height}px`;
-        canvas.getContext("2d")?.setTransform(scale, 0, 0, scale, 0, 0);
-      });
-
-      tiles = makeTiles(width, height);
-      revealedCount = 0;
-      maskContext.fillStyle = "#0b100f";
-      maskContext.fillRect(0, 0, width, height);
-      startedAt = performance.now();
+    function removeRecord(media, record) {
+      if (record.timer) clearTimeout(record.timer);
+      record.timer = 0;
+      record.cancelAnimation?.();
+      record.cancelAnimation = null;
+      releaseSlot(record);
+      record.listeners.forEach(([event, listener]) => media.removeEventListener(event, listener));
+      record.listeners = [];
+      intersectionObserver?.unobserve(media);
+      activeRecords.delete(record);
+      completedRecords.delete(record);
+      if (records.get(media) === record) records.delete(media);
     }
 
-    function draw(now) {
-      if (!width || !height || !tiles.length) {
-        frameId = requestAnimationFrame(draw);
+    function finish(media, record) {
+      record.cancelAnimation = null;
+      record.status = "done";
+      releaseSlot(record);
+      completedRecords.add(record);
+      pump();
+    }
+
+    function maybeQueue(media, record) {
+      if (stopped || !media.isConnected || records.get(media) !== record || record.status !== "waiting" || !record.inViewport) return;
+      if (motionPreference.matches) {
+        record.status = "skipped";
         return;
       }
+      if (!isMediaReady(media) || !media.getBoundingClientRect().width || !media.getBoundingClientRect().height) return;
+      record.status = "queued";
+      queue.push({ media, record });
+      pump();
+    }
 
-      const elapsed = Math.max(0, now - startedAt);
-      while (
-        revealedCount < tiles.length
-        && elapsed >= revealedCount * tileStagger + tileRevealDuration
-      ) {
-        const tile = tiles[revealedCount];
-        maskContext.clearRect(tile.x, tile.y, tile.width, tile.height);
-        revealedCount += 1;
+    function pump() {
+      while (!stopped && activeCount < maxConcurrentAnimations && queue.length) {
+        const { media, record } = queue.shift();
+        if (!media.isConnected || records.get(media) !== record || record.status !== "queued") continue;
+        activeCount += 1;
+        record.hasSlot = true;
+        record.status = "delayed";
+        record.timer = window.setTimeout(() => {
+          record.timer = 0;
+          if (stopped || !media.isConnected || records.get(media) !== record) {
+            releaseSlot(record);
+            pump();
+            return;
+          }
+          record.status = "running";
+          record.cancelAnimation = createOverlay(media, () => finish(media, record));
+          if (!record.cancelAnimation) {
+            record.status = "error";
+            releaseSlot(record);
+            pump();
+          }
+        }, 90 + Math.random() * 230);
       }
+    }
 
-      swarmContext.clearRect(0, 0, width, height);
-      tiles.forEach((tile, index) => {
-        const tileStart = index * tileStagger;
-        const tileAge = elapsed - tileStart;
-        if (tileAge < 0 || tileAge >= tileRevealDuration) return;
+    function refresh(media) {
+      if (!media.isConnected) return;
+      const key = getMediaKey(media);
+      const existing = records.get(media);
+      if (existing?.key === key) {
+        maybeQueue(media, existing);
+        return;
+      }
+      if (existing) removeRecord(media, existing);
 
-        const progress = tileAge / tileRevealDuration;
-        const inset = 2 + (1 - progress) * 5;
-        swarmContext.globalAlpha = 1 - progress * 0.62;
-        swarmContext.strokeStyle = colors[index % colors.length];
-        swarmContext.lineWidth = 1.5;
-        swarmContext.strokeRect(
-          tile.x + inset,
-          tile.y + inset,
-          Math.max(1, tile.width - inset * 2),
-          Math.max(1, tile.height - inset * 2),
-        );
-        swarmContext.globalAlpha = 1;
+      const record = { media, key, status: "waiting", inViewport: false, hasSlot: false, timer: 0, cancelAnimation: null, listeners: [] };
+      records.set(media, record);
+      activeRecords.add(record);
+      const onMediaEvent = () => refresh(media);
+      const events = media instanceof HTMLImageElement
+        ? ["load", "error"]
+        : media instanceof HTMLVideoElement
+          ? ["loadeddata", "canplay", "loadedmetadata", "error"]
+          : [];
+      events.forEach((event) => {
+        media.addEventListener(event, onMediaEvent);
+        record.listeners.push([event, onMediaEvent]);
       });
 
-      for (let index = 0; index < cursorCount; index += 1) {
-        const color = colors[index % colors.length];
-        const point = cursorPosition(index, elapsed, tiles, width, height);
-        swarmContext.beginPath();
-        for (let trail = 5; trail >= 0; trail -= 1) {
-          const previous = cursorPosition(index, Math.max(0, elapsed - trail * 28), tiles, width, height);
-          if (trail === 5) swarmContext.moveTo(previous.x, previous.y);
-          else swarmContext.lineTo(previous.x, previous.y);
+      if (motionPreference.matches) {
+        record.status = "skipped";
+      } else {
+        intersectionObserver?.observe(media);
+        if (!intersectionObserver) {
+          record.inViewport = isInViewport(media);
+          maybeQueue(media, record);
         }
-        swarmContext.strokeStyle = color;
-        swarmContext.globalAlpha = 0.12;
-        swarmContext.lineWidth = 2;
-        swarmContext.stroke();
-        swarmContext.globalAlpha = 1;
-        drawPointer(swarmContext, point.x, point.y, color);
       }
-
-      const totalDuration = (tiles.length - 1) * tileStagger + tileRevealDuration;
-      if (elapsed >= totalDuration) {
-        swarmContext.clearRect(0, 0, width, height);
-        setPhase("done");
-        setStatus(`${label} rebuilt.`);
-        return;
-      }
-      frameId = requestAnimationFrame(draw);
     }
 
-    const observer = new ResizeObserver(() => {
-      resize();
-      if (frameId) cancelAnimationFrame(frameId);
-      frameId = requestAnimationFrame(draw);
+    function scan(root) {
+      if (root instanceof Element && root.matches(mediaSelector)) refresh(root);
+      root.querySelectorAll?.(mediaSelector).forEach(refresh);
+    }
+
+    function cleanRemoved(root) {
+      if (root instanceof Element && root.matches(mediaSelector)) {
+        const record = records.get(root);
+        if (record) removeRecord(root, record);
+      }
+      root.querySelectorAll?.(mediaSelector).forEach((media) => {
+        const record = records.get(media);
+        if (record) removeRecord(media, record);
+      });
+    }
+
+    const intersectionObserver = typeof IntersectionObserver === "undefined"
+      ? null
+      : new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          const record = records.get(entry.target);
+          if (!record) return;
+          if (entry.isIntersecting) {
+            record.inViewport = true;
+            if (record.status === "done" || record.status === "error") {
+              record.status = "waiting";
+              completedRecords.delete(record);
+            }
+            maybeQueue(entry.target, record);
+          } else {
+            record.inViewport = false;
+            if (record.status === "queued") record.status = "waiting";
+            if (record.status === "delayed") {
+              clearTimeout(record.timer);
+              record.timer = 0;
+              record.status = "waiting";
+              releaseSlot(record);
+              pump();
+            }
+          }
+        });
+      }, { rootMargin: "120px" });
+
+    function isInViewport(media) {
+      const bounds = media.getBoundingClientRect();
+      return bounds.width > 0 && bounds.height > 0
+        && bounds.bottom >= 0 && bounds.right >= 0
+        && bounds.top <= window.innerHeight && bounds.left <= window.innerWidth;
+    }
+
+    function updateViewportFallback() {
+      activeRecords.forEach((record) => {
+        const visible = isInViewport(record.media);
+        if (visible && !record.inViewport) {
+          record.inViewport = true;
+          if (record.status === "done" || record.status === "error") record.status = "waiting";
+          maybeQueue(record.media, record);
+        } else if (!visible && record.inViewport) {
+          record.inViewport = false;
+          if (record.status === "queued") record.status = "waiting";
+          if (record.status === "delayed") {
+            clearTimeout(record.timer);
+            record.timer = 0;
+            record.status = "waiting";
+            releaseSlot(record);
+            pump();
+          }
+        }
+      });
+    }
+
+    function updateCompletedMediaOnScroll() {
+      if (completedScrollFrame || stopped) return;
+      completedScrollFrame = requestAnimationFrame(() => {
+        completedScrollFrame = 0;
+        completedRecords.forEach((record) => {
+          const visible = isInViewport(record.media);
+          if (!visible) {
+            record.inViewport = false;
+          } else if (!record.inViewport) {
+            record.inViewport = true;
+            record.status = "waiting";
+            completedRecords.delete(record);
+            maybeQueue(record.media, record);
+          }
+        });
+      });
+    }
+
+    const mutationObserver = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === "attributes" && mutation.target instanceof Element) {
+          if (mutation.target.matches(mediaSelector)) refresh(mutation.target);
+          const video = mutation.target.closest("video");
+          if (video) refresh(video);
+          const image = mutation.target.closest("picture")?.querySelector("img");
+          if (image) refresh(image);
+        }
+        if (mutation.type === "childList" && mutation.target instanceof Element) {
+          const video = mutation.target.closest("video");
+          if (video) refresh(video);
+          const image = mutation.target.closest("picture")?.querySelector("img");
+          if (image) refresh(image);
+        }
+        mutation.addedNodes.forEach((node) => {
+          if (node instanceof Element) scan(node);
+        });
+        mutation.removedNodes.forEach((node) => {
+          if (node instanceof Element && !node.isConnected) cleanRemoved(node);
+        });
+      });
     });
-    observer.observe(layer);
-    resize();
-    frameId = requestAnimationFrame(draw);
+    mutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["src", "srcset", "poster", "style", "data-swarm-media"],
+    });
+
+    function onMotionChange(event) {
+      if (event.matches) {
+        activeRecords.forEach((record) => {
+          record.status = "skipped";
+          completedRecords.delete(record);
+          record.cancelAnimation?.();
+          record.cancelAnimation = null;
+          if (record.timer) clearTimeout(record.timer);
+          record.timer = 0;
+          releaseSlot(record);
+          activeRecords.add(record);
+        });
+        queue.length = 0;
+        pump();
+        return;
+      }
+      activeRecords.forEach((record) => {
+        const { media } = record;
+        if (media && record.status === "skipped") {
+          removeRecord(media, record);
+          refresh(media);
+        }
+      });
+      scan(document.body);
+    }
+
+    if (motionPreference.addEventListener) motionPreference.addEventListener("change", onMotionChange);
+    else motionPreference.addListener(onMotionChange);
+    window.addEventListener("scroll", updateCompletedMediaOnScroll, { passive: true });
+    if (!intersectionObserver) {
+      window.addEventListener("scroll", updateViewportFallback, true);
+      window.addEventListener("resize", updateViewportFallback);
+    }
+    scan(document.body);
 
     return () => {
-      observer.disconnect();
-      cancelAnimationFrame(frameId);
+      stopped = true;
+      mutationObserver.disconnect();
+      intersectionObserver?.disconnect();
+      if (motionPreference.removeEventListener) motionPreference.removeEventListener("change", onMotionChange);
+      else motionPreference.removeListener(onMotionChange);
+      window.removeEventListener("scroll", updateCompletedMediaOnScroll);
+      cancelAnimationFrame(completedScrollFrame);
+      if (!intersectionObserver) {
+        window.removeEventListener("scroll", updateViewportFallback, true);
+        window.removeEventListener("resize", updateViewportFallback);
+      }
+      activeRecords.forEach((record) => {
+        const { media } = record;
+        if (media) removeRecord(media, record);
+      });
+      queue.length = 0;
     };
-  }, [label, phase, video]);
+  }, [pathname, search]);
 
-  function start() {
-    if (window.matchMedia(reducedMotionQuery).matches) {
-      setPhase("skipped");
-      setStatus(`Animation skipped for ${label} because reduced motion is enabled.`);
-      return;
-    }
-    if (typeof ResizeObserver === "undefined") {
-      setPhase("unavailable");
-      setStatus(`The ${label} rebuild effect is unavailable because resize observation is not supported.`);
-      return;
-    }
-    if (!document.createElement("canvas").getContext("2d")) {
-      setPhase("unavailable");
-      setStatus(`The ${label} rebuild effect is unavailable because canvas is not supported.`);
-      return;
-    }
-    setStatus(`Rebuilding ${label}.`);
-    setPhase("running");
-  }
-
-  function exit() {
-    setPhase("idle");
-    setStatus("");
-  }
-
-  const showCanvases = phase === "running" || phase === "done";
-
-  return (
-    <div
-      className={`swarm-rebuild-layer${video ? " swarm-rebuild-video" : ""}`}
-      ref={layerRef}
-      aria-label={`${label} rebuild effect`}
-    >
-      {showCanvases && (
-        <div className="swarm-canvas-stack" aria-hidden="true">
-          <canvas className="swarm-mask-canvas" ref={maskCanvasRef} />
-          <canvas className="swarm-cursor-canvas" ref={swarmCanvasRef} />
-        </div>
-      )}
-      <div className="swarm-rebuild-controls">
-        {phase === "idle" && <button type="button" className="swarm-rebuild-button" onClick={start}>Rebuild</button>}
-        {phase === "running" && <button type="button" className="swarm-rebuild-button" onClick={exit}>Exit</button>}
-        {phase === "done" && (
-          <>
-            <button type="button" className="swarm-rebuild-button" onClick={start}>Replay</button>
-            <button type="button" className="swarm-rebuild-button" onClick={exit}>Exit</button>
-          </>
-        )}
-        {phase === "skipped" && (
-          <>
-            <span className="swarm-rebuild-note">Reduced motion</span>
-            <button type="button" className="swarm-rebuild-button" onClick={exit}>Exit</button>
-          </>
-        )}
-        {phase === "unavailable" && (
-          <>
-            <span className="swarm-rebuild-note">Effect unavailable</span>
-            <button type="button" className="swarm-rebuild-button" onClick={exit}>Exit</button>
-          </>
-        )}
-      </div>
-      <span className="swarm-sr-only" role="status" aria-live="polite">{status}</span>
-    </div>
-  );
+  return null;
 }

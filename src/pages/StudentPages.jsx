@@ -398,7 +398,7 @@ export function MyCoursesPage() {
                         : `/app/learn/${next.id}`;
                       return (
                         <article className="student-owned-course-card" key={course.id}>
-                          <div className={`student-owned-course-art student-owned-course-art-${course.id}`}>
+                          <div className={`student-owned-course-art student-owned-course-art-${course.id}`} data-swarm-media="student-course-art">
                             <span>{course.tag}</span>
                             <i aria-hidden="true" />
                           </div>

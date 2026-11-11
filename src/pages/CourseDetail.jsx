@@ -41,7 +41,8 @@ export default function CourseDetail() {
 
   return (
     <main className="container course-detail-page">
-      <section className={`course-detail-hero course-detail-${course.id}`} style={course.heroImage ? { backgroundImage: `linear-gradient(90deg,rgba(8,12,11,.96),rgba(8,12,11,.7)),url("${course.heroImage}")` } : undefined}>
+      <section className={`course-detail-hero course-detail-${course.id}`}>
+        {course.heroImage && <div className="course-detail-hero-background" data-swarm-media="course-hero" style={{ backgroundImage: `linear-gradient(90deg,rgba(8,12,11,.96),rgba(8,12,11,.7)),url("${course.heroImage}")` }} />}
         <div className="course-detail-hero-copy">
           <Link to="/courses" className="course-back-link">← All courses</Link>
           <span className="tag">{course.tag}</span>
@@ -56,7 +57,7 @@ export default function CourseDetail() {
           {enrollmentAction}
         </div>
         <div className="course-trailer" aria-label={`${course.title} trailer preview`}>
-          <div className="course-trailer-art"><span>OWN THE FRAME / {course.tag}</span><i /></div>
+          <div className="course-trailer-art" data-swarm-media="course-trailer"><span>OWN THE FRAME / {course.tag}</span><i /></div>
           <div className="course-trailer-message">
             <span className="course-trailer-mark">▶</span>
             <div><strong>Course trailer</strong><span>Preview video coming soon</span></div>

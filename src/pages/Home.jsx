@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import Reveal from "../components/Reveal";
-import SwarmRebuild from "../components/SwarmRebuild";
 import { courses as courseCatalog, getPublicCourseData, isPublicCourse } from "../data/courses";
 import { adminStorageKeys, getAdminPlans, isAvailableBundle, readAdminData } from "../data/adminWorkspace";
 import { faq } from "../data/details";
@@ -108,7 +107,7 @@ export default function Home() {
             </div>
 
             <div className="hero-visual">
-              <img src="/editor-studio.svg" alt="Cinematic video editing studio with a film viewer and editing timeline" />
+              <img data-swarm-media="hero" src="/editor-studio.svg" alt="Cinematic video editing studio with a film viewer and editing timeline" />
               <div className="visual-label visual-label-top"><span className="visual-live" /> THE EDITING ROOM</div>
               <div className="visual-card">
                 <span className="visual-card-mark">OT / 01</span>
@@ -119,7 +118,6 @@ export default function Home() {
                 <span className="visual-caption-line" />
                 <span>OWN THE FRAME</span>
               </div>
-              <SwarmRebuild label="homepage image" />
             </div>
           </section>
         </div>
@@ -144,7 +142,7 @@ export default function Home() {
               <Link to="/about" className="text-link">Our philosophy <span aria-hidden="true">↗</span></Link>
             </div>
             <div className="brand-film">
-              <div className="brand-film-frame">
+              <div className="brand-film-frame" data-swarm-media="featured-film-art">
                 <span className="film-kicker">OWN THE FRAME / STUDY 001</span>
                 <div className="film-title">A cut is<br /><em>a choice.</em></div>
                 <div className="film-sun" />
@@ -191,9 +189,8 @@ export default function Home() {
             {courses.map((course, index) => (
               <article className={`card featured-course course-${course.slug}`} key={course.id}>
                 <div className="course-card-top"><div className="tag">{course.tag}</div><span className="course-index">{String(index + 1).padStart(2, "0")}</span></div>
-                <div className="course-art" style={course.thumbnail ? { backgroundImage: `linear-gradient(0deg,rgba(8,12,11,.35),rgba(8,12,11,.05)),url("${course.thumbnail}")` } : undefined}>
+                <div className="course-art" data-swarm-media="course-art" style={course.thumbnail ? { backgroundImage: `linear-gradient(0deg,rgba(8,12,11,.35),rgba(8,12,11,.05)),url("${course.thumbnail}")` } : undefined}>
                   <span aria-hidden="true">{course.visual}</span><i aria-hidden="true" /><b aria-hidden="true" />
-                  {course.thumbnail && <SwarmRebuild label={`${course.title} thumbnail`} />}
                 </div>
                 <div className="course-card-copy">
                   <h3>{course.title}</h3>
@@ -242,7 +239,7 @@ export default function Home() {
             <div className="student-showcase-grid">
               {selectedShowcase.slice(0, 3).map((item) => (
                 <article className="student-project-card" key={item.id}>
-                  <a className="student-project-link" href={item.url} target="_blank" rel="noreferrer">
+                  <a className="student-project-link" data-swarm-media="showcase-preview" href={item.url} target="_blank" rel="noreferrer">
                     <span className="student-project-icon">▶</span><span>VIEW PROJECT ↗</span>
                   </a>
                   <div className="student-project-copy">
@@ -268,7 +265,7 @@ export default function Home() {
       <section id="free-course" className="container section">
         <Reveal>
           <div className="free-course-banner">
-            <div className="free-course-art" aria-hidden="true"><span>VOICE</span><i /><b>FREE<br />LESSONS</b></div>
+            <div className="free-course-art" data-swarm-media="free-course-art" aria-hidden="true"><span>VOICE</span><i /><b>FREE<br />LESSONS</b></div>
             <div className="free-course-copy">
               <span className="eyebrow">08 / START FREE · 8 LESSONS</span>
               <h2>Find the voice in your edit.</h2>

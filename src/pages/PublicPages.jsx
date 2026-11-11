@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import SwarmRebuild from "../components/SwarmRebuild";
 import { courses, getPublicCourseData, isPublicCourse } from "../data/courses";
 import { details, faq } from "../data/details";
 import { prices } from "../data/admin";
@@ -211,7 +210,7 @@ export function CoursesPage() {
               if (course.free) {
                 return (
                   <article className="card catalog-card catalog-course-free" key={course.id}>
-                    <div className="catalog-card-art" role="img" aria-label="Voice mini-course artwork">
+                    <div className="catalog-card-art" data-swarm-media="course-art" role="img" aria-label="Voice mini-course artwork">
                       <span>FREE / VOICE</span><i />
                     </div>
                     <div className="catalog-card-content">
@@ -233,9 +232,8 @@ export function CoursesPage() {
               const coursePrice = course.price !== "" && course.price != null ? course.price : prices[course.id];
               return (
                 <article className={`card catalog-card catalog-course-${course.id}`} key={course.id}>
-                  <div className="catalog-card-art" role="group" aria-label={`${course.title} thumbnail`} style={course.thumbnail ? { backgroundImage: `linear-gradient(0deg,rgba(8,12,11,.35),rgba(8,12,11,.05)),url("${course.thumbnail}")` } : undefined}>
+                  <div className="catalog-card-art" data-swarm-media="course-art" role="group" aria-label={`${course.title} thumbnail`} style={course.thumbnail ? { backgroundImage: `linear-gradient(0deg,rgba(8,12,11,.35),rgba(8,12,11,.05)),url("${course.thumbnail}")` } : undefined}>
                     <span aria-hidden="true">0{index + 1} / OWN THE FRAME</span><i aria-hidden="true" />
-                    {course.thumbnail && <SwarmRebuild label={`${course.title} thumbnail`} />}
                   </div>
                   <div className="catalog-card-content">
                     <span className="tag">{course.tag}</span>
@@ -264,7 +262,7 @@ export function CoursesPage() {
       </section>
 
       <section className="catalog-free-promo">
-        <div className="catalog-free-art" aria-hidden="true"><span>VOICE</span><i>FREE / 08 LESSONS</i></div>
+        <div className="catalog-free-art" data-swarm-media="free-course-art" aria-hidden="true"><span>VOICE</span><i>FREE / 08 LESSONS</i></div>
         <div>
           <span className="eyebrow">TRY THE METHOD</span>
           <h2>Start with sound. Find your editing voice.</h2>
@@ -503,7 +501,7 @@ export function ShowcasePage() {
         description="Explore concept studies that reveal the thinking behind an edit, and student projects shared with permission. The work matters; so does the process that shaped it."
       />
       <section className="showcase-featured" aria-labelledby="featured-project-title">
-        <div className="showcase-featured-art"><span>OWN THE FRAME / BRAND STUDY 01</span><i /><b>01 — PRESSURE<br />02 — RELEASE</b></div>
+        <div className="showcase-featured-art" data-swarm-media="featured-showcase-art"><span>OWN THE FRAME / BRAND STUDY 01</span><i /><b>01 — PRESSURE<br />02 — RELEASE</b></div>
         <div className="showcase-featured-copy">
           <span className="eyebrow">FEATURED PROJECT · OWN THEME CONCEPT STUDY</span>
           <h2 id="featured-project-title">{featuredProject.title}</h2>
@@ -527,7 +525,7 @@ export function ShowcasePage() {
           <div className="showcase-project-grid">
             {filteredProjects.map((project, index) => (
               <article className={`showcase-project-card${project.student ? " student-project" : ""}`} key={project.slug}>
-                <Link to={`/showcase/${project.slug}`} className="showcase-project-art" aria-label={`View project ${project.title}`}>
+                <Link to={`/showcase/${project.slug}`} className="showcase-project-art" data-swarm-media="showcase-art" aria-label={`View project ${project.title}`}>
                   <span>{project.student ? "STUDENT PROJECT · SHARED WITH PERMISSION" : `OWN THE FRAME / STUDY 0${index + 1}`}</span><i /><b aria-hidden="true">↗</b>
                 </Link>
                 <div className="showcase-project-copy">
@@ -629,7 +627,7 @@ export function ShowcaseProjectPage() {
             <span>Open the student’s project ↗</span>
           </a>
         ) : (
-          <div className="showcase-detail-brand-art"><span>OWN THE FRAME / CREATIVE STUDY</span><i /><b>{project.title}</b><small>Illustrative brand example · final edit preview unavailable</small></div>
+          <div className="showcase-detail-brand-art" data-swarm-media="showcase-art"><span>OWN THE FRAME / CREATIVE STUDY</span><i /><b>{project.title}</b><small>Illustrative brand example · final edit preview unavailable</small></div>
         )}
       </section>
       <div className="showcase-detail-columns">
@@ -769,7 +767,7 @@ export function FreeMiniCoursePage() {
         description="Try the Own Theme approach before choosing a full course. Lesson titles, final learning outcomes, and the enrollment/access rules are awaiting confirmation."
       />
       <section className="free-course-intro-panel">
-        <div className="free-course-intro-art" aria-hidden="true"><span>VOICE</span><i /><b>FREE<br />PREVIEW</b></div>
+        <div className="free-course-intro-art" data-swarm-media="free-course-art" aria-hidden="true"><span>VOICE</span><i /><b>FREE<br />PREVIEW</b></div>
         <div className="free-course-intro-copy">
           <span className="eyebrow">A FIRST TASTE OF THE METHOD</span>
           <h2>Make creative choices with intention.</h2>

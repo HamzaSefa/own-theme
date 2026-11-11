@@ -2,6 +2,7 @@ import { Routes, Route, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
+import SwarmRebuild from "./components/SwarmRebuild";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -76,6 +77,7 @@ function App() {
   return (
     <>
       {!inStudentPlatform && !inClassroom && <Navbar />}
+      <SwarmRebuild />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/courses" element={<CoursesPage />} />
