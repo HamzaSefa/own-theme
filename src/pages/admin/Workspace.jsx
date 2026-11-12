@@ -1180,7 +1180,7 @@ export function ShowcaseModeration() {
 
 export function SiteSettings() {
   const initial = readAdminData(adminStorageKeys.settings, {
-    homeHeadline: "Don't Just Edit Videos. Create Your Style.",
+    homeHeadline: "Edit And Create Your Own Style.",
     homeDescription: "Learn video editing, master visual storytelling, and turn your ideas into videos that stand out.",
     supportEmail: "",
     supportPhone: "",

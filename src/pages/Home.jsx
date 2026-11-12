@@ -13,8 +13,8 @@ const themeStack = [
 
 export default function Home() {
   const siteSettings = readAdminData(adminStorageKeys.settings, {});
-  const headline = siteSettings.homeHeadline || "Don't Just Edit Videos. Create Your Style.";
-  const highlightedPhrase = "Create Your Style.";
+  const headline = siteSettings.homeHeadline || "Edit And Create Your Own Style.";
+  const highlightedPhrase = "Create Your Own Style.";
   const highlightIndex = headline.indexOf(highlightedPhrase);
 
   return (
