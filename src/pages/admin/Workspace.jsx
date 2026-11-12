@@ -1180,8 +1180,8 @@ export function ShowcaseModeration() {
 
 export function SiteSettings() {
   const initial = readAdminData(adminStorageKeys.settings, {
-    homeHeadline: "You don't have to follow a theme. Build one.",
-    homeDescription: "Three video editing courses that teach you to design your own style, not copy a template.",
+    homeHeadline: "Don't Just Edit Videos. Create Your Style.",
+    homeDescription: "Learn video editing, master visual storytelling, and turn your ideas into videos that stand out.",
     supportEmail: "",
     supportPhone: "",
     brandLogoUrl: "",

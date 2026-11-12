@@ -3,18 +3,18 @@ import Reveal from "../components/Reveal";
 import { adminStorageKeys, readAdminData } from "../data/adminWorkspace";
 
 const themeStack = [
-  { n: "01", name: "Premise", q: "What is this about, and what should the viewer feel at the end?" },
-  { n: "02", name: "Rhythm", q: "How long do you hold shots, and when do you break your own pattern?" },
-  { n: "03", name: "Color", q: "What temperature and contrast match the premise?" },
-  { n: "04", name: "Sound", q: "What do we hear, and where is it silent?" },
-  { n: "05", name: "Type & Motion", q: "How do words and graphics arrive and leave?" },
-  { n: "06", name: "Signature", q: "What one move do you repeat so people recognize your work?" },
+  { n: "01", name: "STORY", q: "Understand your idea and decide what you want your audience to feel." },
+  { n: "02", name: "TIMING", q: "Learn when to cut, how to build rhythm, and how to keep viewers engaged." },
+  { n: "03", name: "COLOR", q: "Use color and contrast to create the right mood." },
+  { n: "04", name: "SOUND", q: "Combine music, sound effects, and silence to make every moment count." },
+  { n: "05", name: "TEXT & EFFECTS", q: "Add titles, graphics, and motion that bring your video to life." },
+  { n: "06", name: "YOUR SIGNATURE", q: "Develop a recognizable editing style that makes your work stand out." },
 ];
 
 export default function Home() {
   const siteSettings = readAdminData(adminStorageKeys.settings, {});
-  const headline = siteSettings.homeHeadline || "You don't have to follow a theme. Build one.";
-  const highlightedPhrase = "Build one.";
+  const headline = siteSettings.homeHeadline || "Don't Just Edit Videos. Create Your Style.";
+  const highlightedPhrase = "Create Your Style.";
   const highlightIndex = headline.indexOf(highlightedPhrase);
 
   return (
@@ -23,11 +23,11 @@ export default function Home() {
         <div className="container">
           <section className="hero">
             <div className="hero-copy">
-              <span className="badge"><span className="badge-dot" />A VIDEO EDITING LEARNING STUDIO</span>
+              <span className="badge"><span className="badge-dot" />VIDEO EDITING COURSES</span>
               <h1>{highlightIndex >= 0
                 ? <>{headline.slice(0, highlightIndex)}<span>{highlightedPhrase}</span>{headline.slice(highlightIndex + highlightedPhrase.length)}</>
                 : headline}</h1>
-              <p>{siteSettings.homeDescription || "Learn practical editing, visual storytelling, and a workflow for shaping polished films with a style of your own."}</p>
+              <p>{siteSettings.homeDescription || "Learn video editing, master visual storytelling, and turn your ideas into videos that stand out."}</p>
               <div className="hero-btns">
                 <Link to="/courses" className="btn btn-primary">Explore Courses <span aria-hidden="true">↗</span></Link>
                 <Link to="/about" className="btn btn-outline">Our approach <span aria-hidden="true">↗</span></Link>
@@ -59,17 +59,16 @@ export default function Home() {
         <Reveal>
           <div className="brand-grid">
             <div className="brand-copy">
-              <span className="eyebrow">03 / A DIFFERENT KIND OF EDITING SCHOOL</span>
-              <h2>Presets can change a picture. <span>They can't give it a point of view.</span></h2>
+              <span className="eyebrow">01 / WHAT MAKES US DIFFERENT</span>
+              <h2>Learn the Skills. Develop Your Style.</h2>
               <p>
-                A familiar transition can make an edit look polished, but style
-                comes from knowing why a shot stays, when a sound enters, and
-                what feeling the cut should leave behind.
+                Anyone can use presets and effects. The real skill is knowing
+                how to use them to make a video feel right.
               </p>
               <p>
-                Own Theme teaches the thinking behind the tools, so you can
-                borrow techniques, break patterns, and make choices that feel
-                like yours.
+                At Own Theme, you'll learn how to choose the right shots, sounds,
+                and transitions to tell better stories and create edits that feel
+                uniquely yours.
               </p>
               <Link to="/about" className="text-link">Our philosophy <span aria-hidden="true">↗</span></Link>
             </div>
@@ -93,9 +92,9 @@ export default function Home() {
       <section className="container section method-section">
         <Reveal>
           <div className="section-heading">
-            <span className="eyebrow">04 / THE OWN THEME METHOD</span>
-            <h2 className="section-title">A style is a system of choices.</h2>
-            <p className="section-sub">The Theme Stack gives you six creative elements to question, test, and make your own in every edit.</p>
+            <span className="eyebrow">02 / HOW YOU'LL LEARN</span>
+            <h2 className="section-title">Learn the Details. Build Your Style.</h2>
+            <p className="section-sub">Great editing comes from making the right choices. Our six-step method helps you understand the key elements of video editing and use them to create your own style.</p>
           </div>
           <div className="stack-grid">
             {themeStack.map((item) => (
@@ -112,12 +111,12 @@ export default function Home() {
       <section className="container section final-home-section">
         <Reveal>
           <div className="final-home-cta">
-            <span className="eyebrow">11 / YOUR NEXT CUT STARTS HERE</span>
-            <h2>Make something that could only come from you.</h2>
-            <p>Start with a free lesson or choose the track that fits the stories you want to tell.</p>
+            <span className="eyebrow">03 / START YOUR CREATIVE JOURNEY</span>
+            <h2>Your Ideas. Your Style. Your Next Edit.</h2>
+            <p>Learn video editing, improve your skills, and create videos you're proud to share. Start learning for free or find the course that fits your goals.</p>
             <div className="hero-btns">
-              <Link to="/courses" className="btn btn-primary">Explore courses <span aria-hidden="true">↗</span></Link>
-              <Link to="/free-course" className="btn btn-outline">Try the free mini-course</Link>
+              <Link to="/courses" className="btn btn-primary">Explore Courses <span aria-hidden="true">↗</span></Link>
+              <Link to="/free-course" className="btn btn-outline">Start Learning for Free</Link>
             </div>
           </div>
         </Reveal>

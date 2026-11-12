@@ -526,7 +526,7 @@ h1, h2, h3, h4, .logo, .price, .stat strong {
 }
 .brand-grid { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 64px; }
 .brand-copy h2 { margin: 18px 0; font-size: clamp(32px, 4vw, 48px); line-height: 1.12; }
-.brand-copy h2 span { color: #7ab8aa; }
+.brand-copy h2 span { color: var(--color-text-primary); }
 .brand-copy p { max-width: 500px; margin: 0 0 16px; color: var(--muted); }
 .text-link { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-weight: 650; text-decoration: none; }
 .text-link span { color: var(--accent); transition: transform .2s; }
