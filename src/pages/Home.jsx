@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import Reveal from "../components/Reveal";
 import { adminStorageKeys, readAdminData } from "../data/adminWorkspace";
+import { courses, isPublicCourse } from "../data/courses";
+import { details } from "../data/details";
 
 const themeStack = [
   { n: "01", name: "STORY", q: "Understand your idea and decide what you want your audience to feel." },
@@ -12,7 +15,12 @@ const themeStack = [
 ];
 
 export default function Home() {
+  const [selectedLessonId, setSelectedLessonId] = useState(null);
   const siteSettings = readAdminData(adminStorageKeys.settings, {});
+  const previewCourse = courses.find((course) => course.id === "short-form" && isPublicCourse(course));
+  const previewLessons = previewCourse?.modules.flatMap((module) => module.lessons).slice(0, 3) || [];
+  const selectedLesson = previewLessons.find((lesson) => lesson.id === selectedLessonId) || previewLessons[0];
+  const courseInfo = previewCourse ? details[previewCourse.id] : null;
   const headline = siteSettings.homeHeadline || "Edit And Create Your Own Style.";
   const highlightedPhrase = "Create Your Own Style.";
   const highlightIndex = headline.indexOf(highlightedPhrase);
@@ -56,37 +64,59 @@ export default function Home() {
         </div>
       </div>
 
-      <section id="showreel" className="container section brand-section">
+      <section id="showreel" className="container section brand-section home-course-preview-section">
         <Reveal>
-          <div className="brand-grid">
-            <div className="brand-copy">
-              <span className="eyebrow">01 / WHAT MAKES US DIFFERENT</span>
-              <h2>Learn the Skills. Develop Your Style.</h2>
-              <p>
-                Anyone can use presets and effects. The real skill is knowing
-                how to use them to make a video feel right.
-              </p>
-              <p>
-                At Own Theme, you'll learn how to choose the right shots, sounds,
-                and transitions to tell better stories and create edits that feel
-                uniquely yours.
-              </p>
-              <Link to="/about" className="text-link">Our philosophy <span aria-hidden="true">↗</span></Link>
+          <div className="home-course-preview-grid">
+            <div className="home-course-preview-copy">
+              <span className="eyebrow">01 / A LOOK INSIDE</span>
+              <h2>{previewCourse?.title || "Explore the Own Theme courses."}</h2>
+              <p>{previewCourse?.description || courseInfo?.promise || "Learn the decisions behind a distinctive edit."}</p>
+              <dl className="home-course-preview-meta">
+                <div>
+                  <dt>Instructor</dt>
+                  <dd>{previewCourse?.instructor || "Details coming soon"}</dd>
+                </div>
+                <div>
+                  <dt>Course length</dt>
+                  <dd>{previewCourse?.estimatedDuration || courseInfo?.hours || "Details coming soon"}</dd>
+                </div>
+              </dl>
+              <Link to={previewCourse ? `/courses/${previewCourse.slug || previewCourse.id}` : "/courses"} className="btn btn-primary">
+                Explore the course <span aria-hidden="true">↗</span>
+              </Link>
             </div>
-            <div className="brand-film">
-              <div className="brand-film-frame">
-                <span className="film-kicker">OWN THE FRAME / STUDY 001</span>
-                <div className="film-title">A cut is<br /><em>a choice.</em></div>
-                <div className="film-sun" />
-                <div className="film-horizon" />
-                <span className="film-timecode">00:01:24:08</span>
+            <div className="home-course-preview-media">
+              <div className="home-course-preview-screen">
+                <img
+                  src={previewCourse?.thumbnail || "/editor-studio.svg"}
+                  alt={previewCourse?.thumbnail ? `${previewCourse.title} course artwork` : "Illustration of a video editing studio and timeline"}
+                  loading="lazy"
+                />
+                <span className="home-course-preview-status">Lesson video coming soon</span>
               </div>
-              <div className="brand-film-caption">
-                <span className="film-play-mark" aria-hidden="true">OT</span>
-                <span>Showreel preview coming soon · A point of view in every frame.</span>
+              <div className="home-course-preview-caption">
+                <span>{selectedLesson?.title || "Lesson details coming soon"}</span>
+                <span>{selectedLesson?.duration || ""}</span>
               </div>
             </div>
           </div>
+          {previewLessons.length > 0 && (
+            <div className="home-course-lesson-list" role="group" aria-label="Preview course lessons">
+              {previewLessons.map((lesson, index) => (
+                <button
+                  className={selectedLesson?.id === lesson.id ? "home-course-lesson active" : "home-course-lesson"}
+                  type="button"
+                  aria-pressed={selectedLesson?.id === lesson.id}
+                  key={lesson.id}
+                  onClick={() => setSelectedLessonId(lesson.id)}
+                >
+                  <span className="home-course-lesson-number">LESSON 0{index + 1}</span>
+                  <strong>{lesson.title}</strong>
+                  {lesson.duration && <span className="home-course-lesson-duration">{lesson.duration}</span>}
+                </button>
+              ))}
+            </div>
+          )}
         </Reveal>
       </section>
 

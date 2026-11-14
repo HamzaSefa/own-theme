@@ -162,6 +162,92 @@ function SupportContactForm({ supportEmail }) {
   );
 }
 
+function ShowcaseComparison() {
+  const [position, setPosition] = useState(54);
+
+  return (
+    <div className="showcase-study">
+      <div className="showcase-study-heading">
+        <div>
+          <span className="eyebrow">A CLOSER LOOK / COLOR & MOOD</span>
+          <h2>Same frame. Different feeling.</h2>
+          <p>Drag the divider to compare a neutral starting image with an intentional warm grade.</p>
+        </div>
+        <span className="showcase-study-disclaimer">Illustrative visual study · not original footage</span>
+      </div>
+      <div className="showcase-study-grid">
+        <div className="showcase-comparison" style={{ "--showcase-split": `${position}%` }}>
+          <svg className="showcase-comparison-scene" viewBox="0 0 960 540" role="img" aria-label="Illustrated dusk landscape with a figure looking toward distant hills">
+            <defs>
+              <linearGradient id="showcase-sky" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor="#263c46" />
+                <stop offset=".62" stopColor="#73817a" />
+                <stop offset="1" stopColor="#d0a277" />
+              </linearGradient>
+              <linearGradient id="showcase-ground" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stopColor="#324c47" />
+                <stop offset="1" stopColor="#121b1a" />
+              </linearGradient>
+              <radialGradient id="showcase-sun">
+                <stop offset="0" stopColor="#f4d0a0" stopOpacity=".9" />
+                <stop offset="1" stopColor="#f4d0a0" stopOpacity="0" />
+              </radialGradient>
+            </defs>
+            <rect width="960" height="540" fill="url(#showcase-sky)" />
+            <circle cx="690" cy="210" r="118" fill="url(#showcase-sun)" />
+            <circle cx="690" cy="210" r="37" fill="#eac69c" opacity=".82" />
+            <path d="M0 350 130 260l102 85 146-143 135 135 106-92 148 105 99-87 94 74v203H0Z" fill="#526863" opacity=".82" />
+            <path d="m0 390 163-92 133 102 174-124 126 116 156-94 208 101v141H0Z" fill="#293d39" />
+            <path d="M0 425q160-45 320 3t320-1q160-44 320 4v109H0Z" fill="url(#showcase-ground)" />
+            <path d="M0 461q160-33 320 2t320-1q160-34 320 3" fill="none" stroke="#d4b28a" strokeOpacity=".44" strokeWidth="3" />
+            <path d="M0 474q160-30 320 2t320-1q160-32 320 3" fill="none" stroke="#d4b28a" strokeOpacity=".24" strokeWidth="2" />
+            <path d="M500 540q20-48 54-66 35-20 66 0 29 18 42 66Z" fill="#101615" />
+            <circle cx="586" cy="438" r="14" fill="#101615" />
+            <path d="M586 452v55m-22-29 22 12 22-15" fill="none" stroke="#101615" strokeWidth="12" strokeLinecap="round" />
+            <rect y="0" width="960" height="540" fill="url(#showcase-sun)" opacity=".1" />
+          </svg>
+          <div className="showcase-comparison-grade" aria-hidden="true" />
+          <span className="showcase-comparison-label is-before">NEUTRAL START</span>
+          <span className="showcase-comparison-label is-after">INTENTIONAL GRADE</span>
+          <div className="showcase-comparison-divider" aria-hidden="true" />
+          <input
+            className="showcase-comparison-range"
+            type="range"
+            min="0"
+            max="100"
+            value={position}
+            onChange={(event) => setPosition(Number(event.target.value))}
+            aria-label="Compare neutral starting image with intentional color grade"
+            aria-valuetext={`${position}% intentional grade visible`}
+          />
+        </div>
+        <div className="showcase-study-process">
+          <span className="eyebrow">THE EDITING DECISIONS</span>
+          <h3>Build the feeling, not just the look.</h3>
+          <p>Color is doing more than decorating the frame. A restrained warm highlight draws attention to the horizon, while deeper shadows keep the figure and foreground grounded.</p>
+          <div className="showcase-timeline" aria-label="Illustrative editing timeline">
+            <div className="showcase-timeline-row">
+              <span>PICTURE</span><div className="showcase-timeline-clip clip-picture"><i /><i /><i /><i /></div>
+            </div>
+            <div className="showcase-timeline-row">
+              <span>COLOR</span><div className="showcase-timeline-clip clip-color"><i>Warm highlight</i><i>Shadow depth</i></div>
+            </div>
+            <div className="showcase-timeline-row">
+              <span>SOUND</span><div className="showcase-timeline-clip clip-sound"><i /><i /><i /><i /><i /><i /><i /><i /><i /><i /><i /></div>
+            </div>
+          </div>
+          <small>Conceptual timeline · shown to explain the layers, not from an editing project file.</small>
+        </div>
+      </div>
+      <div className="showcase-technique-breakdown">
+        <article><span>01 / COLOR</span><h3>Guide the eye</h3><p>Warmth leads attention toward the brightest point in the frame.</p></article>
+        <article><span>02 / CONTRAST</span><h3>Keep the subject legible</h3><p>Shadow depth separates the figure without losing the landscape.</p></article>
+        <article><span>03 / PACING</span><h3>Leave room to feel</h3><p>A held frame gives the audience time to notice the shift in mood.</p></article>
+      </div>
+    </div>
+  );
+}
+
 function hasConfirmedMembershipTerms(plans) {
   return plans.membershipStatus === "Available"
     && plans.membershipPublicationStatus === "Published"
@@ -207,8 +293,15 @@ export function CoursesPage() {
         course.tag,
         course.category,
         course.description,
+        course.level,
+        course.estimatedDuration,
+        course.bestFor,
+        course.software,
+        ...(course.outcomes || []),
         info?.promise,
+        info?.hours,
         info?.software,
+        info?.capstone,
         ...(info?.forWho || []),
         ...(info?.modules || []).flatMap((module) => [module.title, module.outcome]),
       ].join(" ").toLowerCase();
@@ -274,37 +367,49 @@ export function CoursesPage() {
           <div className="catalog-grid">
             {filteredCourses.map((course, index) => {
               const info = details[course.id];
-              if (course.free) {
-                return (
-                  <article className="card catalog-card catalog-course-free" key={course.id}>
-                    <div className="catalog-card-art catalog-card-art-free" role="img" aria-label="Voice mini-course artwork">
-                      <span>FREE / VOICE</span><i />
-                    </div>
-                    <div className="catalog-card-content">
-                      <span className="catalog-card-category">{course.category}</span>
-                      <h3>{course.title}</h3>
-                      <p>{course.description}</p>
-                      <div className="catalog-card-metadata">
-                        <span>Beginner-friendly</span>
-                        <span>8 lessons</span>
-                      </div>
-                      <div className="catalog-bottom">
-                        <span className="catalog-free-label">Free</span>
-                        <Link className="btn btn-primary" to="/free-course">Start learning <span aria-hidden="true">↗</span></Link>
-                      </div>
-                    </div>
-                  </article>
-                );
-              }
-              const lessonCount = course.modules.reduce((total, module) => total + module.lessons.length, 0);
+              const lessonCount = course.free
+                ? 8
+                : info?.lessons
+                  || course.lessonCount
+                  || (course.modules || []).reduce((total, module) => total + (module.lessons?.length || 0), 0);
               const duration = course.estimatedDuration || info?.hours;
-              const subscriptionOnly = course.purchaseOption === "Subscription included";
+              const subscriptionOnly = !course.free && course.purchaseOption === "Subscription included";
               const coursePrice = course.price !== "" && course.price != null ? course.price : prices[course.id];
               const featuredPreview = course.id === publicCourses[0]?.id && Boolean(course.thumbnail);
+              const coursePath = course.free ? "/free-course" : `/courses/${course.slug || course.id}`;
+              const previewPath = course.free
+                ? `${coursePath}#free-course-lessons-title`
+                : `${coursePath}#lesson-preview`;
+              const level = course.level || "Beginner-friendly";
+              const bestFor = course.bestFor
+                || info?.forWho?.[0]
+                || (course.free ? "Creators exploring voice and sound in editing" : "Details coming soon");
+              const tools = course.software || info?.software || "Details coming soon";
+              const outcome = course.outcomes?.[0]
+                || info?.capstone
+                || info?.modules?.[0]?.outcome
+                || course.description
+                || "Details coming soon";
+              const priceLabel = course.free
+                ? "Free"
+                : subscriptionOnly
+                  ? "Membership"
+                  : coursePrice != null && coursePrice !== ""
+                    ? `USD ${coursePrice}`
+                    : "Price not set";
+              const priceNote = course.free
+                ? "no cost"
+                : subscriptionOnly
+                  ? "access"
+                  : coursePrice != null && coursePrice !== ""
+                    ? "one-time"
+                    : "";
               return (
                 <article className={`card catalog-card catalog-course-${course.id}`} key={course.id}>
-                  <Link to={`/courses/${course.slug || course.id}`} className="catalog-card-art" aria-label={`View ${course.title} course`}>
-                    {course.thumbnail
+                  <Link to={coursePath} className={`catalog-card-art${course.free ? " catalog-card-art-free" : ""}`} aria-label={`View details for ${course.title}`}>
+                    {course.free ? (
+                      <span className="catalog-card-art-placeholder">FREE / VOICE</span>
+                    ) : course.thumbnail
                       ? <img className="catalog-card-thumbnail" data-swarm-media={featuredPreview ? "course-preview" : undefined} data-swarm-trigger={featuredPreview ? "hover" : undefined} src={course.thumbnail} alt="" aria-hidden="true" />
                       : <span className="catalog-card-art-placeholder" aria-hidden="true">{course.tag || `COURSE 0${index + 1}`}</span>}
                     <span className="catalog-card-art-label" aria-hidden="true">{course.category || course.tag}</span>
@@ -314,19 +419,29 @@ export function CoursesPage() {
                   <div className="catalog-card-content">
                     <div className="catalog-card-heading">
                       <span className="catalog-card-category">{course.category || course.tag}</span>
-                      {course.level && <span className="catalog-card-level">{course.level}</span>}
+                      <span className="catalog-card-level">{level}</span>
                     </div>
                     <h3>{course.title}</h3>
                     <p>{course.description || info?.promise || "Build a style of your own with practical, project-based editing lessons."}</p>
-                    <div className="catalog-card-metadata" aria-label="Course details">
-                      {lessonCount > 0 && <span>{lessonCount} lessons</span>}
-                      {duration && <span>{duration}</span>}
-                    </div>
-                    {course.instructor && <p className="catalog-card-instructor"><span>Instructor</span>{course.instructor}</p>}
-                    {info?.software && <p className="catalog-card-software"><span>TOOLS</span>{info.software}</p>}
-                    <div className="catalog-bottom">
-                      <span className="price">{subscriptionOnly ? "Membership" : coursePrice != null ? `USD ${coursePrice}` : "Price not set"}<small>{subscriptionOnly ? " access" : coursePrice != null ? " · one-time" : ""}</small></span>
-                      <Link className="btn btn-primary" to={subscriptionOnly ? "/plans" : `/courses/${course.slug || course.id}`}>{subscriptionOnly ? "View plans" : "View course"} <span aria-hidden="true">↗</span></Link>
+                    <dl className="catalog-card-comparison">
+                      <div className="catalog-card-facts">
+                        <div><dt>Duration</dt><dd>{duration || "Details coming soon"}</dd></div>
+                        <div><dt>Lessons</dt><dd>{lessonCount || "Details coming soon"}</dd></div>
+                      </div>
+                      <div className="catalog-card-spec"><dt>Best for</dt><dd>{bestFor}</dd></div>
+                      <div className="catalog-card-spec"><dt>Tools</dt><dd>{tools}</dd></div>
+                      <div className="catalog-card-spec"><dt>Outcome</dt><dd>{outcome}</dd></div>
+                    </dl>
+                    <div className="catalog-card-footer">
+                      <div className="catalog-card-price">
+                        <span>Price</span>
+                        <strong>{priceLabel}</strong>
+                        {priceNote && <small>{priceNote}</small>}
+                      </div>
+                      <div className="catalog-card-actions">
+                        <Link className="btn btn-primary" to={coursePath}>View course <span aria-hidden="true">↗</span></Link>
+                        <Link className="btn btn-outline" to={previewPath}>Preview lessons</Link>
+                      </div>
                     </div>
                   </div>
                 </article>
@@ -641,17 +756,7 @@ export function ShowcasePage() {
       </section>
 
       <section className="showcase-before-after">
-        <div><span className="eyebrow">OPTIONAL STUDY / BEFORE & AFTER</span><h2>One thought can change the cut.</h2><p>These are illustrative Own Theme brand studies, not student submissions.</p></div>
-        <div className="showcase-ba-grid">
-          {showcase.map((item) => (
-            <article className="showcase-ba-card" key={item.slug}>
-              <span className="eyebrow">{item.category}</span>
-              <div className="ba before"><small>STARTING THOUGHT</small>{item.before}</div>
-              <div className="ba after"><small>CREATIVE DIRECTION</small>{item.after}</div>
-              <Link to={`/showcase/${item.slug}`} className="text-link">See the process <span aria-hidden="true">↗</span></Link>
-            </article>
-          ))}
-        </div>
+        <ShowcaseComparison />
       </section>
 
       <div className="public-page-cta">
@@ -745,8 +850,8 @@ export function AboutPage() {
       />
       <section className="about-story-section">
         <span className="eyebrow">WHY OWN THEME</span>
-        <h2>Templates are useful tools. They are not a point of view.</h2>
-        <p>A preset or transition can solve a small part of an edit, but relying on templates alone can leave the story, pacing, sound, and color making no deliberate argument. Own Theme teaches the decisions behind the tools, so editors can choose when a template helps—and when to make another choice.</p>
+        <h2>Create with intention. Edit with your own identity.</h2>
+        <p>Go beyond presets and predictable edits. Learn to shape every frame, sound, color, and transition into something that reflects your creative vision. Your style should be recognizable, not replaceable.</p>
       </section>
       <section className="about-method">
         <span className="eyebrow">THE TEACHING PHILOSOPHY</span>

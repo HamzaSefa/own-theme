@@ -22,7 +22,9 @@ export default function CourseDetail() {
   });
   const allLessons = course.modules.flatMap((module) => module.lessons);
   const exampleLesson = allLessons.find((lesson) => lesson.preview === true) || allLessons[0];
-  const lessonCount = course.modules.reduce((total, module) => total + module.lessons.length, 0);
+  const lessonCount = info?.lessons
+    || course.lessonCount
+    || course.modules.reduce((total, module) => total + module.lessons.length, 0);
   const price = course.price !== "" && course.price != null ? course.price : prices[course.id];
   const subscriptionOnly = course.purchaseOption === "Subscription included";
   const outcomes = [

@@ -42,7 +42,16 @@ import {
 function App() {
   const location = useLocation();
   useEffect(() => {
-    if (!location.hash) window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    if (!location.hash) {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      return undefined;
+    }
+
+    const targetId = location.hash.slice(1);
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(targetId)?.scrollIntoView({ behavior: "auto", block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [location.pathname, location.hash]);
   const inStudentPlatform = [
     "/app",
