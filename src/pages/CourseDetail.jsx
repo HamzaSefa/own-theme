@@ -117,7 +117,7 @@ export default function CourseDetail() {
             ) : <p className="muted">A sample lesson will be added when a preview is available.</p>}
           </section>
 
-          <section className="detail-section" id="assignments-resources">
+          <section className="detail-section" id="project-resources">
             <span className="eyebrow">05 / PROJECTS & RESOURCES</span>
             <h2>Practice what you learn</h2>
             <div className="course-resource-grid">
@@ -143,7 +143,7 @@ export default function CourseDetail() {
                 ))}
               </ul>
             )}
-            <p className="course-resource-note">Assignment review terms and additional access conditions have not been listed yet.</p>
+            <p className="course-resource-note">Additional course resources will be listed here as they become available.</p>
           </section>
 
           <section className="detail-section" id="instructor">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
 import { courses, getAllLessons, getProgress, getCurrentEnrollments } from "../data/courses";
 import { adminStorageKeys, readAdminData } from "../data/adminWorkspace";
@@ -7,10 +7,8 @@ import { SuccessMessage, ValidationError } from "../components/States";
 import {
   getCurrentUser,
   getUserStorageKey,
-  getUserSubmissions,
   readStudentData,
   saveStudentData,
-  saveUserSubmissions,
   setCurrentUser,
   signOut,
 } from "../data/studentPortal";
@@ -19,8 +17,6 @@ const THEME_SHEET_KEY = "ownTheme_themeSheet";
 const NOTIFICATIONS_KEY = "ownTheme_notifications";
 const NOTIFICATION_PREFERENCES_KEY = "ownTheme_notification_preferences";
 const DEFAULT_NOTIFICATION_PREFERENCES = {
-  feedback: true,
-  assignments: true,
   courses: true,
   billing: true,
 };
@@ -83,16 +79,29 @@ export function StudentRoute({ children, classroom = false }) {
 
 function StudentLayout({ children }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuToggleRef = useRef(null);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    function closeOnEscape(event) {
+      if (event.key !== "Escape") return;
+      setMenuOpen(false);
+      menuToggleRef.current?.focus();
+    }
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [menuOpen]);
 
   return (
     <div className="student-platform">
-      <StudentHeader menuOpen={menuOpen} onToggleMenu={() => setMenuOpen((open) => !open)} />
+      <StudentHeader menuOpen={menuOpen} menuToggleRef={menuToggleRef} onToggleMenu={() => setMenuOpen((open) => !open)} />
       <div className="student-shell">
         {menuOpen && (
           <button
             type="button"
             className="student-nav-backdrop"
             aria-label="Close learning space navigation"
+            tabIndex="-1"
             onClick={() => setMenuOpen(false)}
           />
         )}
@@ -106,7 +115,7 @@ function StudentLayout({ children }) {
   );
 }
 
-function StudentHeader({ menuOpen, onToggleMenu }) {
+function StudentHeader({ menuOpen, menuToggleRef, onToggleMenu }) {
   const navigate = useNavigate();
   const user = useStudentUser();
   const initials = (user?.name || "Student").trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
@@ -120,6 +129,7 @@ function StudentHeader({ menuOpen, onToggleMenu }) {
     <header className="student-header">
       <div className="student-header-brand">
         <button
+          ref={menuToggleRef}
           type="button"
           className="student-menu-toggle"
           aria-label={menuOpen ? "Close navigation" : "Open navigation"}
@@ -208,26 +218,6 @@ function ownedCourses() {
     .filter((item) => item.course);
 }
 
-function getAssignmentStatus(status) {
-  const normalized = (status || "").toLowerCase();
-  if (normalized.includes("revision")) return "Revision Requested";
-  if (normalized === "completed" || normalized === "complete") return "Completed";
-  if (normalized.includes("review")) return "Under Review";
-  if (normalized.includes("feedback sent")) return "Under Review";
-  if (normalized.includes("submitted") || normalized.includes("feedback")) return "Submitted";
-  if (normalized === "draft") return "Draft";
-  return "To Do";
-}
-
-function findSubmissionHistory(submissions, assignment) {
-  return submissions
-    .filter((item) => item.courseId === assignment.courseId && (
-      item.assignmentId === assignment.id
-      || (!item.assignmentId && item.title === assignment.title)
-    ))
-    .sort((a, b) => new Date(b.submittedAt || b.updatedAt || b.createdAt || 0) - new Date(a.submittedAt || a.updatedAt || a.createdAt || 0));
-}
-
 function getThemeSheets() {
   const saved = readStudentData(getUserStorageKey(THEME_SHEET_KEY), []);
   if (Array.isArray(saved)) return saved;
@@ -251,62 +241,14 @@ function saveOwnShowcaseProjects(projects) {
   saveStudentData(adminStorageKeys.showcaseProjects, [...projects, ...otherProjects]);
 }
 
-function getConfiguredAssignments(owned) {
-  return owned.flatMap(({ course }) => course.modules.flatMap((module, moduleIndex) => {
-    const configured = Array.isArray(module.assignments)
-      ? module.assignments
-      : module.assignment
-        ? [module.assignment]
-        : module.assignmentTitle
-          ? [{ title: module.assignmentTitle, description: module.assignmentDescription }]
-          : [];
-    return configured.map((assignment, assignmentIndex) => {
-      const data = typeof assignment === "string" ? { title: assignment } : assignment;
-      return {
-        ...data,
-        id: String(data.id || `${course.id}-${moduleIndex}-${assignmentIndex}`),
-        courseId: course.id,
-        courseTitle: course.title,
-        moduleTitle: module.title,
-        moduleLessons: module.lessons || [],
-        title: data.title || "Course assignment",
-        instructions: data.instructions || data.description || "",
-      };
-    });
-  }));
-}
-
 function createLocalRecordId() {
   return globalThis.crypto.randomUUID();
 }
 
 function getNotificationPreferenceKey(type) {
-  if (type === "instructor_feedback" || type === "revision_requested") return "feedback";
-  if (type === "assignment_status") return "assignments";
   if (type === "course_announcement" || type === "lesson_announcement") return "courses";
   if (type === "order_status" || type === "subscription_status") return "billing";
   return "";
-}
-
-function addStudentNotification(notification) {
-  const preferences = {
-    ...DEFAULT_NOTIFICATION_PREFERENCES,
-    ...readStudentData(getUserStorageKey(NOTIFICATION_PREFERENCES_KEY), {}),
-  };
-  const preference = getNotificationPreferenceKey(notification.type);
-  if (preference && !preferences[preference]) return;
-
-  const notifications = readStudentData(NOTIFICATIONS_KEY, []);
-  saveStudentData(NOTIFICATIONS_KEY, [
-    {
-      id: createLocalRecordId(),
-      recipientEmail: getCurrentUser()?.email || "",
-      createdAt: new Date().toISOString(),
-      unread: true,
-      ...notification,
-    },
-    ...notifications,
-  ]);
 }
 
 export function MyCoursesPage() {
@@ -484,8 +426,6 @@ export function CurriculumPage() {
     ? course.modules.findIndex((module) => module.lessons.some((lesson) => lesson.id === currentLesson.id))
     : -1;
   const progress = lessons.length ? getProgress(course, completed) : 0;
-  const courseSubmissions = getUserSubmissions()
-    .filter((assignment) => assignment.courseId === course.id);
   const moduleResources = course.modules.flatMap((module) =>
     module.lessons
       .filter((lesson) => lesson.resourceUrl && lesson.locked !== true)
@@ -535,13 +475,6 @@ export function CurriculumPage() {
             {course.modules.map((module, index) => {
               const moduleLessons = module.lessons || [];
               const moduleCompleted = moduleLessons.filter((lesson) => completedLessons.has(lesson.id)).length;
-              const moduleAssignments = Array.isArray(module.assignments)
-                ? module.assignments
-                : module.assignment
-                  ? [module.assignment]
-                  : module.assignmentTitle
-                    ? [{ title: module.assignmentTitle, description: module.assignmentDescription }]
-                    : [];
               return (
                 <details
                   className="student-curriculum-module"
@@ -608,26 +541,6 @@ export function CurriculumPage() {
                     ) : (
                       <p className="student-curriculum-note">Lessons for this module have not been added yet.</p>
                     )}
-                    <div className="student-module-assignment">
-                      <div>
-                        <span className="eyebrow">MODULE ASSIGNMENT</span>
-                        {moduleAssignments.length ? (
-                          moduleAssignments.map((assignment, assignmentIndex) => {
-                            const assignmentTitle = typeof assignment === "string" ? assignment : assignment.title;
-                            const assignmentDescription = typeof assignment === "string" ? "" : assignment.description;
-                            return (
-                              <div className="student-module-assignment-item" key={`${assignmentTitle}-${assignmentIndex}`}>
-                                <strong>{assignmentTitle || "Assignment"}</strong>
-                                {assignmentDescription && <p>{assignmentDescription}</p>}
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <p>No assignment has been linked to this module yet.</p>
-                        )}
-                      </div>
-                      <Link to="/app/assignments" className="text-link">Go to assignments <span aria-hidden="true">↗</span></Link>
-                    </div>
                   </div>
                 </details>
               );
@@ -665,394 +578,8 @@ export function CurriculumPage() {
           <span className="eyebrow">COMPLETION</span>
           <h2>Course completion criteria</h2>
           <p>Completion is based on marking all {lessons.length} course lessons complete.</p>
-          <p>Assignments are not currently configured as a course completion requirement.</p>
-          <div className="student-course-assignment-summary">
-            <strong>Course submissions</strong>
-            <span>{courseSubmissions.length ? `${courseSubmissions.length} submitted` : "No submissions yet"}</span>
-            <Link to="/app/assignments">View assignments <span aria-hidden="true">↗</span></Link>
-          </div>
         </article>
       </section>
-    </div>
-  );
-}
-
-export function AssignmentsPage() {
-  const owned = ownedCourses();
-  const submissions = getUserSubmissions();
-  const [statusFilter, setStatusFilter] = useState("To Do");
-  const configuredAssignments = getConfiguredAssignments(owned);
-  const configuredSubmissionIds = new Set();
-  const assignmentItems = configuredAssignments.map((assignment) => {
-    const history = findSubmissionHistory(submissions, assignment);
-    const submission = history[0];
-    history.forEach((item) => configuredSubmissionIds.add(item.id));
-    if (submission) configuredSubmissionIds.add(submission.id);
-    return {
-      ...assignment,
-      submission,
-      history,
-      status: submission ? getAssignmentStatus(submission.status) : "To Do",
-      dueDate: assignment.dueDate || null,
-    };
-  });
-  const unlinkedSubmissions = submissions
-    .filter((item) => owned.some(({ course }) => course.id === item.courseId))
-    .filter((item) => !configuredSubmissionIds.has(item.id))
-    .map((item) => {
-      const course = owned.find(({ course: ownedCourse }) => ownedCourse.id === item.courseId)?.course;
-      return {
-        id: item.assignmentId || item.id,
-        courseId: item.courseId,
-        courseTitle: course?.title || "Course",
-        title: item.title,
-        instructions: item.notes || "Student project submitted for instructor review.",
-        dueDate: null,
-        lessonId: item.lessonId,
-        status: getAssignmentStatus(item.status),
-        submission: item,
-      };
-    });
-  const allAssignmentItems = [...assignmentItems, ...unlinkedSubmissions];
-  const filterOptions = ["To Do", "Draft", "Submitted", "Under Review", "Revision Requested", "Completed"];
-  const filteredAssignments = allAssignmentItems.filter((item) => item.status === statusFilter);
-
-  return (
-    <div className="student-assignments-page">
-      <PageHeading
-        title="Assignments"
-        description="See what needs attention, track your submissions, and open the lessons connected to your projects."
-      />
-      <section className="student-assignment-overview">
-        <div className="student-assignment-overview-copy">
-          <span className="eyebrow">YOUR PRACTICE</span>
-          <h2>{allAssignmentItems.length ? "Keep your projects moving." : "Your assignment space is ready."}</h2>
-          <p>
-            {allAssignmentItems.length
-              ? "Start an available brief or follow up on work you have already submitted."
-              : "Assignment briefs have not been added to your enrolled courses yet. Check your course curriculum for lessons and updates."}
-          </p>
-        </div>
-        <div className="student-assignment-counts" aria-label="Assignment totals">
-          {filterOptions.map((status) => (
-            <div key={status}><strong>{allAssignmentItems.filter((item) => item.status === status).length}</strong><span>{status}</span></div>
-          ))}
-        </div>
-      </section>
-
-      <section className="student-assignment-worklist">
-        <header className="student-assignment-list-heading">
-          <div><span className="eyebrow">ASSIGNMENT WORKLIST</span><h2>What needs your attention?</h2></div>
-          {owned.length > 0 && <Link className="text-link" to="/app/courses">Browse course curriculum <span aria-hidden="true">↗</span></Link>}
-        </header>
-        <div className="student-assignment-filters" role="group" aria-label="Filter assignments">
-          {filterOptions.map((status) => (
-            <button type="button" className={statusFilter === status ? "student-course-filter active" : "student-course-filter"} aria-pressed={statusFilter === status} key={status} onClick={() => setStatusFilter(status)}>
-              {status}<span>{allAssignmentItems.filter((item) => item.status === status).length}</span>
-            </button>
-          ))}
-        </div>
-        {filteredAssignments.length ? (
-          <div className="student-assignment-cards">
-            {filteredAssignments.map((item) => {
-              const status = item.status;
-              const relatedLesson = item.lessonId
-                ? courses.find((course) => course.id === item.courseId)?.modules.flatMap((module) => module.lessons || []).find((lesson) => lesson.id === item.lessonId)
-                : item.moduleLessons?.[0];
-              const actionLabel = {
-                "To Do": "Action required: submit your work.",
-                Draft: "Your draft is saved and ready to finish.",
-                Submitted: "Your submission is waiting for instructor review.",
-                "Under Review": "Your instructor is reviewing this work.",
-                "Revision Requested": "Action required: revise and resubmit.",
-                Completed: "This assignment is complete.",
-              }[status];
-              const hasFeedback = item.submission?.feedback || item.submission?.feedbackHistory?.length;
-              return (
-                <article className="student-assignment-card" key={`${item.courseId}-${item.id}`}>
-                  <Link className="student-assignment-card-main" to={`/app/assignments/${item.id}`}>
-                  <div className="student-assignment-card-heading">
-                    <span className={`student-assignment-status status-${status.toLowerCase().replaceAll(" ", "-")}`}>{status}</span>
-                    {item.dueDate && !Number.isNaN(new Date(item.dueDate).getTime()) && <span className="student-assignment-due">Due {new Date(item.dueDate).toLocaleDateString()}</span>}
-                  </div>
-                  <span className="eyebrow">{item.courseTitle}{item.moduleTitle ? ` · ${item.moduleTitle}` : ""}</span>
-                  <h3>{item.title}</h3>
-                  <p>{item.instructions || "Assignment instructions have not been provided."}</p>
-                  </Link>
-                  {item.submission?.feedback && <div className="student-assignment-feedback"><strong>Instructor feedback</strong><p>{item.submission.feedback}</p></div>}
-                  <div className="student-assignment-card-footer">
-                    <span className="student-assignment-action">
-                      {actionLabel}
-                    </span>
-                    <div className="student-assignment-card-links">
-                      {relatedLesson && <Link to={`/app/learn/${relatedLesson.id}`}>Related lesson ↗</Link>}
-                      {item.submission?.url && <a href={item.submission.url} target="_blank" rel="noreferrer">Open submission ↗</a>}
-                      {status === "To Do" && <Link to={`/app/assignments/${item.id}`}>Open brief and submit →</Link>}
-                      {(status === "Draft" || status === "Revision Requested") && <Link to={`/app/assignments/${item.id}`}>{status === "Draft" ? "Continue draft →" : "Revise and resubmit →"}</Link>}
-                      {hasFeedback && <Link to={`/app/feedback/${item.submission.id}`}>Read feedback ↗</Link>}
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="student-course-empty">
-            <span className="student-empty-mark" aria-hidden="true">✓</span>
-            <h2>{statusFilter === "To Do" ? "No assignments to do." : `No ${statusFilter.toLowerCase()} assignments.`}</h2>
-            <p>{statusFilter === "To Do" ? "New assignment briefs will appear here when they are added to your courses." : "Assignments in this status will appear here when available."}</p>
-          </div>
-        )}
-      </section>
-
-      {!owned.length && (
-        <EmptyState title="Enroll to see course assignments." text="Assignments are tied to the courses in your learning library." to="/courses" label="Explore courses" />
-      )}
-      <p className="student-demo-callout">Assignment drafts and submissions are stored in this browser preview. Instructor review and backend sync are not connected.</p>
-    </div>
-  );
-}
-
-export function AssignmentDetailPage() {
-  const { assignmentId } = useParams();
-  const owned = ownedCourses();
-  const [submissions, setSubmissions] = useState(getUserSubmissions);
-  const configured = getConfiguredAssignments(owned).find((item) => item.id === assignmentId);
-  const directSubmission = submissions.find((item) =>
-    item.id === assignmentId || item.assignmentId === assignmentId
-  );
-  const courseId = configured?.courseId || directSubmission?.courseId;
-  const course = courses.find((item) => item.id === courseId);
-  const assignment = configured || (directSubmission && {
-    id: String(directSubmission.assignmentId || directSubmission.id),
-    courseId: directSubmission.courseId,
-    courseTitle: course?.title || "Course",
-    title: directSubmission.title,
-    instructions: directSubmission.instructions || directSubmission.notes,
-    criteria: directSubmission.criteria || [],
-    deliverables: directSubmission.deliverables || [],
-    lessonId: directSubmission.lessonId,
-    status: getAssignmentStatus(directSubmission.status),
-    dueDate: null,
-  });
-  const history = assignment
-    ? findSubmissionHistory(submissions, assignment)
-    : [];
-  const latest = history[0] || directSubmission;
-  const themeSheets = getThemeSheets();
-  const [url, setUrl] = useState(latest?.url || "");
-  const [notes, setNotes] = useState(latest?.notes || "");
-  const [themeSheetId, setThemeSheetId] = useState(latest?.themeSheetId || "");
-  const [message, setMessage] = useState("");
-  const [messageIsError, setMessageIsError] = useState(false);
-
-  if (!assignment || !course || !owned.some((item) => item.course.id === course.id)) {
-    return <Navigate to="/app/assignments" replace />;
-  }
-
-  const lessons = getAllLessons(course);
-  const relatedLessons = assignment.lessonId
-    ? lessons.filter((lesson) => lesson.id === assignment.lessonId)
-    : assignment.moduleLessons?.length
-      ? assignment.moduleLessons
-      : [];
-  const status = latest ? getAssignmentStatus(latest.status) : "To Do";
-  const criteria = Array.isArray(assignment.criteria)
-    ? assignment.criteria
-    : assignment.evaluationCriteria || [];
-  const deliverables = Array.isArray(assignment.deliverables)
-    ? assignment.deliverables
-    : [];
-  const canSubmit = ["To Do", "Draft", "Revision Requested"].includes(status);
-
-  function saveSubmission(nextStatus) {
-    const now = new Date().toISOString();
-    const submissionId = latest?.status === "Draft" ? latest.id : createLocalRecordId();
-    const submittedAttempt = history.filter((item) => getAssignmentStatus(item.status) !== "Draft").length + 1;
-    const submission = {
-      id: submissionId,
-      assignmentId: assignment.id,
-      courseId: course.id,
-      lessonId: assignment.lessonId || relatedLessons[0]?.id || "",
-      studentEmail: latest?.studentEmail || getCurrentUser()?.email || "",
-      title: assignment.title,
-      url: url.trim(),
-      notes: notes.trim(),
-      themeSheetId,
-      themeSheetSnapshot: themeSheets.find((sheet) => sheet.id === themeSheetId) || null,
-      status: nextStatus,
-      revision: submittedAttempt,
-      previousSubmissionId: latest?.status === "Draft" ? latest.previousSubmissionId || "" : latest?.id || "",
-      submittedAt: nextStatus === "Draft" ? "" : now,
-      updatedAt: now,
-      showcaseConsent: latest?.showcaseConsent || false,
-      showcasePublished: false,
-      feedbackHistory: [],
-    };
-    const updatedSubmissions = [submission, ...submissions.filter((item) => item.id !== submission.id)];
-    saveUserSubmissions(updatedSubmissions);
-    setSubmissions(updatedSubmissions);
-    if (nextStatus !== "Draft") {
-      addStudentNotification({
-        title: latest ? "Assignment resubmitted" : "Assignment submitted",
-        message: `${assignment.title} is saved and awaiting instructor review.`,
-        type: "assignment_status",
-        href: `/app/assignments/${assignment.id}`,
-      });
-    }
-    setMessage(nextStatus === "Draft"
-      ? "Draft saved in this browser preview."
-      : "Submission saved in this browser preview. Instructor submission sync is not connected.");
-    setMessageIsError(false);
-    window.dispatchEvent(new Event("ownTheme:student-data"));
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function handleSubmit(event) {
-    event.preventDefault();
-    if (!url.trim()) {
-      setMessage("Add a video or project link before submitting.");
-      setMessageIsError(true);
-      return;
-    }
-    saveSubmission("Submitted");
-  }
-
-  return (
-    <div className="student-assignment-detail">
-      <Link to="/app/assignments" className="student-detail-back">← Back to assignments</Link>
-      <header className="student-assignment-detail-heading">
-        <div>
-          <span className="eyebrow">{course.title}</span>
-          <h1>{assignment.title}</h1>
-          <p>{assignment.objective || assignment.instructions || "Assignment objective and instructions have not been provided yet."}</p>
-        </div>
-        <span className={`student-assignment-status status-${status.toLowerCase().replaceAll(" ", "-")}`}>{status}</span>
-      </header>
-
-      <div className="student-assignment-detail-grid">
-        <main className="student-assignment-detail-main">
-          <section className="student-assignment-detail-card">
-            <span className="eyebrow">INSTRUCTIONS</span>
-            <h2>What to make</h2>
-            <p>{assignment.instructions || "Detailed instructions will be added when the assignment brief is configured."}</p>
-            {assignment.dueDate && !Number.isNaN(new Date(assignment.dueDate).getTime()) ? (
-              <p className="student-assignment-due">Due {new Date(assignment.dueDate).toLocaleDateString()}</p>
-            ) : (
-              <p className="student-assignment-policy-note">No deadline is configured for this assignment. Deadline policy is pending confirmation.</p>
-            )}
-          </section>
-
-          <section className="student-assignment-detail-card">
-            <span className="eyebrow">EVALUATION</span>
-            <h2>Evaluation criteria</h2>
-            {criteria.length ? (
-              <ul className="student-assignment-criteria">
-                {criteria.map((criterion, index) => (
-                  <li key={`${typeof criterion === "string" ? criterion : criterion.title}-${index}`}>
-                    <strong>{typeof criterion === "string" ? criterion : criterion.title}</strong>
-                    {typeof criterion !== "string" && criterion.description && <p>{criterion.description}</p>}
-                  </li>
-                ))}
-              </ul>
-            ) : <p>Evaluation criteria have not been added to this assignment yet.</p>}
-            <h3>Required deliverables</h3>
-            {deliverables.length ? (
-              <ul className="student-assignment-criteria">
-                {deliverables.map((deliverable, index) => <li key={`${deliverable}-${index}`}>{typeof deliverable === "string" ? deliverable : deliverable.title}</li>)}
-              </ul>
-            ) : <p>Required deliverables have not been specified. Include your work link and any context your instructor needs.</p>}
-          </section>
-
-          <section className="student-assignment-detail-card">
-            <span className="eyebrow">RELATED LESSONS</span>
-            <h2>Review the course material</h2>
-            {relatedLessons.length ? (
-              <ul className="student-assignment-related-lessons">
-                {relatedLessons.map((lesson) => (
-                  <li key={lesson.id}>
-                    <Link to={`/app/learn/${lesson.id}`}>{lesson.title} <span aria-hidden="true">↗</span></Link>
-                  </li>
-                ))}
-              </ul>
-            ) : <p>No lesson is linked to this assignment yet.</p>}
-          </section>
-
-          {history.length > 0 && (
-            <section className="student-assignment-detail-card">
-              <span className="eyebrow">SUBMISSION HISTORY</span>
-              <h2>Your attempts</h2>
-              <div className="student-submission-history">
-                {history.map((item, index) => (
-                  <article key={item.id}>
-                    <div className="student-submission-history-heading">
-                      <strong>{item.status === "Draft" ? "Draft" : `Attempt ${item.revision || history.length - index}`}</strong>
-                      <span className={`student-assignment-status status-${getAssignmentStatus(item.status).toLowerCase().replaceAll(" ", "-")}`}>{getAssignmentStatus(item.status)}</span>
-                    </div>
-                    <small>{item.submittedAt ? new Date(item.submittedAt).toLocaleString() : `Saved ${new Date(item.updatedAt || item.createdAt || 0).toLocaleString()}`}</small>
-                    {item.url && <a href={item.url} target="_blank" rel="noreferrer">Open submitted work ↗</a>}
-                    {item.notes && <p>{item.notes}</p>}
-                    {item.feedback && <div className="student-assignment-feedback"><strong>Instructor feedback</strong><p>{item.feedback}</p></div>}
-                    {item.feedbackHistory?.map((feedback, feedbackIndex) => (
-                      <div className="student-assignment-feedback" key={`${item.id}-feedback-${feedbackIndex}`}>
-                        <strong>{feedback.status || "Instructor feedback"}</strong>
-                        <p>{feedback.comment}</p>
-                        {feedback.createdAt && <small>{new Date(feedback.createdAt).toLocaleString()}</small>}
-                      </div>
-                    ))}
-                  </article>
-                ))}
-              </div>
-            </section>
-          )}
-        </main>
-
-        <aside className="student-assignment-submit-aside">
-          <form className="student-assignment-detail-card student-assignment-detail-form" onSubmit={handleSubmit}>
-            <span className="eyebrow">{status === "Revision Requested" ? "RESUBMISSION" : "YOUR WORK"}</span>
-            <h2>{status === "Revision Requested" ? "Revise and resubmit" : latest ? "Your submission" : "Submit your work"}</h2>
-            {status === "Submitted" || status === "Under Review" ? (
-              <p className="student-assignment-policy-note">Your submission is with your instructor. You can make changes after a revision is requested.</p>
-            ) : null}
-            {status === "Revision Requested" && latest?.revisionRequirements && (
-              <p className="student-revision-requirements">{latest.revisionRequirements}</p>
-            )}
-            <label className="field">
-              <span>Video or project link</span>
-              <input type="url" required={canSubmit} disabled={!canSubmit} value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://…" />
-            </label>
-            <p className="student-upload-note">File upload is not available in this preview. Share a link to a permitted hosted video or project.</p>
-            <label className="field">
-              <span>Optional notes for your instructor</span>
-              <textarea rows="4" disabled={!canSubmit} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="What should your instructor focus on?" />
-            </label>
-            <label className="field">
-              <span>Attach a Theme Sheet</span>
-              <select disabled={!canSubmit} value={themeSheetId} onChange={(event) => setThemeSheetId(event.target.value)}>
-                <option value="">No Theme Sheet attached</option>
-                {themeSheets.map((sheet) => <option value={sheet.id} key={sheet.id}>{sheet.title || "Untitled Theme Sheet"}</option>)}
-              </select>
-            </label>
-            {themeSheetId && (
-              <Link to="/app/theme-sheet" className="text-link">Edit attached Theme Sheet <span aria-hidden="true">↗</span></Link>
-            )}
-            {canSubmit && (
-              <div className="student-assignment-detail-actions">
-                <button type="button" className="btn btn-outline" onClick={() => saveSubmission("Draft")}>Save draft</button>
-                <button type="submit" className="btn btn-primary">
-                  {status === "Revision Requested" ? "Submit revision" : "Submit assignment"}
-                </button>
-              </div>
-            )}
-            {status === "Draft" && <p className="student-assignment-policy-note">Your draft is private until you submit it for review.</p>}
-            {status === "Completed" && <p className="student-assignment-policy-note">This assignment is marked completed. Contact your instructor if you need to submit another version.</p>}
-            {messageIsError
-              ? <ValidationError>{message}</ValidationError>
-              : <SuccessMessage>{message}</SuccessMessage>}
-            <p className="student-demo-callout">Submissions and drafts are stored in this browser preview only.</p>
-          </form>
-        </aside>
-      </div>
     </div>
   );
 }
@@ -1127,7 +654,7 @@ export function ThemeSheetPage() {
     <div className="student-theme-sheet-page">
       <PageHeading
         title="Your Theme Sheet"
-        description="Plan the six creative decisions behind your edit. Save drafts, return to them later, or attach a sheet to an assignment."
+        description="Plan the six creative decisions behind your edit. Save drafts and return to them later."
         action={<button type="button" className="btn btn-outline" onClick={createSheet}>+ New Theme Sheet</button>}
       />
       {sheets.length > 1 && (
@@ -1159,147 +686,24 @@ export function ThemeSheetPage() {
         </div>
         <SuccessMessage>{message}</SuccessMessage>
       </form>
-      <p className="student-demo-callout">Theme Sheets are saved in this browser. Attach a saved sheet when submitting an assignment.</p>
-    </div>
-  );
-}
-
-export function FeedbackPage() {
-  const { submissionId } = useParams();
-  const submissions = getUserSubmissions();
-  const feedbackSubmissions = submissions.filter((item) =>
-    item.feedback
-    || item.feedbackHistory?.length
-    || getAssignmentStatus(item.status) === "Revision Requested"
-  );
-  const selectedSubmission = submissionId
-    ? submissions.find((item) => item.id === submissionId)
-    : null;
-  const revisionItems = feedbackSubmissions.filter((item) => getAssignmentStatus(item.status) === "Revision Requested");
-  const completedReviews = feedbackSubmissions.filter((item) => getAssignmentStatus(item.status) === "Completed");
-
-  return (
-    <div className="student-feedback-page">
-      <PageHeading
-        title={selectedSubmission ? `Feedback: ${selectedSubmission.title}` : "Instructor feedback"}
-        description={selectedSubmission ? "Review the comments attached to this submission and open your work or assignment." : "Review recent comments, revision requests, and completed assignment reviews."}
-        action={selectedSubmission && <Link className="btn btn-outline" to="/app/feedback">All feedback</Link>}
-      />
-      {selectedSubmission ? (
-        <FeedbackDetail key={selectedSubmission.id} submission={selectedSubmission} />
-      ) : (
-        <>
-          <div className="student-feedback-overview">
-            <article><span className="eyebrow">RECENT FEEDBACK</span><strong>{feedbackSubmissions.length}</strong><small>submission threads with feedback</small></article>
-            <article><span className="eyebrow">REVISION REQUESTED</span><strong>{revisionItems.length}</strong><small>need another pass</small></article>
-            <article><span className="eyebrow">COMPLETED REVIEWS</span><strong>{completedReviews.length}</strong><small>marked complete</small></article>
-          </div>
-          {feedbackSubmissions.length ? (
-            <div className="student-feedback-list">
-              {feedbackSubmissions.map((item) => (
-                <article className="student-feedback-item" key={item.id}>
-                  <div className="student-feedback-item-heading">
-                    <div><span className="eyebrow">{courses.find((course) => course.id === item.courseId)?.title || "Course"}</span><h2>{item.title}</h2></div>
-                    <span className={`student-assignment-status status-${getAssignmentStatus(item.status).toLowerCase().replaceAll(" ", "-")}`}>{getAssignmentStatus(item.status)}</span>
-                  </div>
-                  <p>{item.feedbackHistory?.[item.feedbackHistory.length - 1]?.comment || item.feedback}</p>
-                  <div className="student-feedback-item-footer">
-                    <small>{item.submittedAt ? `Submitted ${new Date(item.submittedAt).toLocaleDateString()}` : "Submission date unavailable"} · {item.feedbackHistory?.length || (item.feedback ? 1 : 0)} feedback updates</small>
-                    <Link to={`/app/feedback/${item.id}`}>Open feedback details ↗</Link>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title="Your feedback space is ready."
-              text="Instructor comments will appear here when feedback is added to a submission."
-              to="/app/assignments"
-              label="Go to assignments"
-            />
-          )}
-        </>
-      )}
-      <p className="student-demo-callout">Feedback and review statuses shown here are browser-preview data. Instructor notifications and backend sync are not connected.</p>
-    </div>
-  );
-}
-
-function FeedbackDetail({ submission }) {
-  const feedbackHistory = submission.feedbackHistory?.length
-    ? submission.feedbackHistory
-    : submission.feedback
-      ? [{ comment: submission.feedback, status: submission.status, createdAt: submission.feedbackAt || "" }]
-      : [];
-  const [reviewed, setReviewed] = useState(Boolean(submission.reviewedByStudentAt));
-  const [message, setMessage] = useState("");
-
-  function markReviewed() {
-    const updated = getUserSubmissions().map((item) => item.id === submission.id
-      ? { ...item, reviewedByStudentAt: new Date().toISOString() }
-      : item);
-    saveUserSubmissions(updated);
-    setReviewed(true);
-    setMessage("Marked as reviewed in this browser.");
-  }
-
-  return (
-    <div className="student-feedback-detail">
-      <section className="student-assignment-detail-card">
-        <span className="eyebrow">SUBMITTED WORK</span>
-        <h2>{submission.title}</h2>
-        <p>{courses.find((course) => course.id === submission.courseId)?.title || "Course"}</p>
-        {submission.url && <a href={submission.url} target="_blank" rel="noreferrer">Open submitted work ↗</a>}
-        {submission.notes && <p>{submission.notes}</p>}
-        {submission.revisionRequirements && <div className="student-revision-requirements"><strong>Revision requested</strong><p>{submission.revisionRequirements}</p></div>}
-        <div className="student-feedback-detail-actions">
-          <Link className="btn btn-outline" to={`/app/assignments/${submission.assignmentId || submission.id}`}>Open assignment</Link>
-          {getAssignmentStatus(submission.status) === "Revision Requested" && (
-            <Link className="btn btn-primary" to={`/app/assignments/${submission.assignmentId || submission.id}`}>Revise and resubmit</Link>
-          )}
-          {!reviewed && <button className="btn btn-outline" type="button" onClick={markReviewed}>Mark as reviewed</button>}
-        </div>
-        <SuccessMessage>{message}</SuccessMessage>
-      </section>
-      <section className="student-assignment-detail-card">
-        <span className="eyebrow">FEEDBACK THREAD</span>
-        <h2>Instructor comments</h2>
-        {feedbackHistory.length ? (
-          <div className="student-feedback-thread">
-            {feedbackHistory.map((item, index) => (
-              <article key={`${submission.id}-feedback-${index}`}>
-                <div><strong>{item.status || "Instructor comment"}</strong>{item.createdAt && <small>{new Date(item.createdAt).toLocaleString()}</small>}</div>
-                <p>{item.comment}</p>
-                {item.criteria?.length > 0 && <ul>{item.criteria.map((criterion, criterionIndex) => <li key={`${criterion}-${criterionIndex}`}>{criterion}</li>)}</ul>}
-              </article>
-            ))}
-          </div>
-        ) : <p>No instructor comments have been added to this submission yet.</p>}
-      </section>
+      <p className="student-demo-callout">Theme Sheets are saved in this browser preview.</p>
     </div>
   );
 }
 
 export function MyShowcasePage() {
-  const submissions = getUserSubmissions();
   const [projects, setProjects] = useState(getOwnShowcaseProjects);
-  const [assignments, setAssignments] = useState(submissions);
   const [editingId, setEditingId] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [courseId, setCourseId] = useState(ownedCourses()[0]?.course.id || "");
-  const [assignmentId, setAssignmentId] = useState("");
   const [visibility, setVisibility] = useState("private");
   const [consent, setConsent] = useState(false);
   const [message, setMessage] = useState("");
   const [messageIsError, setMessageIsError] = useState(false);
   const owned = ownedCourses();
-  const assignmentOptions = getConfiguredAssignments(owned);
-  const linkedSubmissions = assignments.filter((item) =>
-    item.url && /^https?:\/\//i.test(item.url) && !item.status?.toLowerCase().includes("draft")
-  );
 
   function resetForm(clearMessage = true) {
     setEditingId("");
@@ -1308,7 +712,6 @@ export function MyShowcasePage() {
     setMediaUrl("");
     setThumbnailUrl("");
     setCourseId(owned[0]?.course.id || "");
-    setAssignmentId("");
     setVisibility("private");
     setConsent(false);
     if (clearMessage) {
@@ -1324,7 +727,6 @@ export function MyShowcasePage() {
     setMediaUrl(project.mediaUrl || "");
     setThumbnailUrl(project.thumbnailUrl || "");
     setCourseId(project.courseId || owned[0]?.course.id || "");
-    setAssignmentId(project.assignmentId || "");
     setVisibility(project.showcaseConsent ? "public" : "private");
     setConsent(Boolean(project.showcaseConsent));
     setMessage("");
@@ -1351,7 +753,6 @@ export function MyShowcasePage() {
       setMessageIsError(true);
       return;
     }
-    const selectedAssignment = assignmentOptions.find((item) => item.id === assignmentId);
     const previous = projects.find((item) => item.id === editingId);
     const project = {
       id: editingId || createLocalRecordId(),
@@ -1360,8 +761,7 @@ export function MyShowcasePage() {
       mediaUrl: url,
       thumbnailUrl: thumbnail,
       url,
-      courseId: selectedAssignment?.courseId || courseId,
-      assignmentId,
+      courseId,
       studentEmail: getCurrentUser()?.email || "",
       showcaseConsent: visibility === "public" && consent,
       showcasePublished: Boolean(previous?.showcasePublished && visibility === "public" && consent
@@ -1369,7 +769,7 @@ export function MyShowcasePage() {
         && previous.description === description.trim()
         && previous.mediaUrl === url
         && previous.thumbnailUrl === thumbnail
-        && previous.courseId === (selectedAssignment?.courseId || courseId)),
+        && previous.courseId === courseId),
       updatedAt: new Date().toISOString(),
     };
     const updated = [project, ...projects.filter((item) => item.id !== project.id)];
@@ -1394,22 +794,6 @@ export function MyShowcasePage() {
     if (editingId === project.id) resetForm();
   }
 
-  function setSubmissionVisibility(item, isPublic) {
-    const updated = assignments.map((record) => record.id === item.id
-      ? { ...record, showcaseConsent: isPublic, showcasePublished: false }
-      : record);
-    const allSubmissions = getUserSubmissions();
-    saveUserSubmissions(allSubmissions.map((record) => record.id === item.id
-      ? { ...record, showcaseConsent: isPublic, showcasePublished: false }
-      : record));
-    setAssignments(updated);
-    setMessage(isPublic
-      ? "Consent saved. Instructor approval is still required before public display."
-      : "This project is now private and removed from the public showcase.");
-    setMessageIsError(false);
-    window.dispatchEvent(new Event("ownTheme:student-data"));
-  }
-
   function getVisibilityStatus(item) {
     if (item.showcasePublished && item.showcaseConsent) return "Published";
     return item.showcaseConsent ? "Awaiting instructor approval" : "Private";
@@ -1422,32 +806,24 @@ export function MyShowcasePage() {
         description="Manage the projects you may want to share. Projects stay private unless you give consent, and public display requires instructor approval."
         action={<a className="btn btn-outline" href="#showcase-project-form">+ Add a project</a>}
       />
-      {projects.length || linkedSubmissions.length ? (
+      {projects.length ? (
         <section className="student-showcase-project-list" aria-label="Your projects">
-          {[...projects.map((item) => ({ ...item, projectRecord: true })), ...linkedSubmissions.map((item) => ({ ...item, projectRecord: false }))].map((item) => {
+          {projects.map((item) => {
             const course = courses.find((entry) => entry.id === item.courseId);
             return (
-              <article className="student-showcase-project" key={`${item.projectRecord ? "project" : "submission"}-${item.id}`}>
+              <article className="student-showcase-project" key={item.id}>
                 <div className="student-showcase-project-heading">
-                  <div><span className="eyebrow">{course?.title || "Own Theme project"}{item.assignmentId ? " · Assignment" : ""}</span><h2>{item.title}</h2></div>
+                  <div><span className="eyebrow">{course?.title || "Own Theme project"}</span><h2>{item.title}</h2></div>
                   <span className={`student-showcase-status ${item.showcasePublished && item.showcaseConsent ? "published" : item.showcaseConsent ? "pending" : "private"}`}>{getVisibilityStatus(item)}</span>
                 </div>
-                <p>{item.projectRecord ? item.description || "No description added." : item.notes || "Assignment submission"}</p>
+                <p>{item.description || "No description added."}</p>
                 <div className="student-showcase-project-links">
-                  <a href={item.projectRecord ? item.mediaUrl : item.url} target="_blank" rel="noreferrer">Open media ↗</a>
-                  {item.assignmentId && <Link to={`/app/assignments/${item.assignmentId}`}>Related assignment ↗</Link>}
+                  <a href={item.mediaUrl || item.url} target="_blank" rel="noreferrer">Open media ↗</a>
                 </div>
-                {item.projectRecord ? (
-                  <div className="student-showcase-project-actions">
-                    <button className="btn btn-outline btn-sm" type="button" onClick={() => editProject(item)}>Edit</button>
-                    <button className="btn btn-danger btn-sm" type="button" onClick={() => removeProject(item)}>Remove</button>
-                  </div>
-                ) : (
-                  <label className="student-showcase-consent">
-                    <input type="checkbox" checked={Boolean(item.showcaseConsent)} onChange={(event) => setSubmissionVisibility(item, event.target.checked)} />
-                    <span>Give consent to be considered for public display. Instructor approval is required.</span>
-                  </label>
-                )}
+                <div className="student-showcase-project-actions">
+                  <button className="btn btn-outline btn-sm" type="button" onClick={() => editProject(item)}>Edit</button>
+                  <button className="btn btn-danger btn-sm" type="button" onClick={() => removeProject(item)}>Remove</button>
+                </div>
               </article>
             );
           })}
@@ -1482,17 +858,9 @@ export function MyShowcasePage() {
         </div>
         <div className="field">
           <label htmlFor="showcase-course">Associated course</label>
-          <select id="showcase-course" value={courseId} onChange={(event) => { setCourseId(event.target.value); setAssignmentId(""); }}>
+          <select id="showcase-course" value={courseId} onChange={(event) => setCourseId(event.target.value)}>
             <option value="">No associated course</option>
             {owned.map(({ course: item }) => <option value={item.id} key={item.id}>{item.title}</option>)}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="showcase-assignment">Associated assignment (optional)</label>
-          <select id="showcase-assignment" value={assignmentId} onChange={(event) => setAssignmentId(event.target.value)}>
-            <option value="">No associated assignment</option>
-            {assignmentOptions.filter((item) => item.courseId === courseId).map((item) => <option value={item.id} key={item.id}>{item.title}</option>)}
-            {assignments.filter((item) => item.courseId === courseId && item.assignmentId && !assignmentOptions.some((assignment) => assignment.id === item.assignmentId)).map((item) => <option value={item.assignmentId} key={item.assignmentId}>{item.title}</option>)}
           </select>
         </div>
         <fieldset className="student-showcase-visibility">
@@ -1551,7 +919,7 @@ export function NotificationsPage() {
     <div className="student-notifications-page">
       <PageHeading
         title="Notifications"
-        description="Course, lesson, instructor, order, and assignment updates—with links to the next useful step."
+        description="Course, lesson, and order updates—with links to the next useful step."
         action={notifications.some((item) => item.unread) && (
           <button className="btn btn-outline btn-sm" onClick={markAllRead}>Mark all read</button>
         )}
@@ -1576,12 +944,12 @@ export function NotificationsPage() {
       ) : (
         <EmptyState
           title="You’re all caught up."
-          text="Feedback, revision requests, assignment changes, course announcements, and order updates will appear here when available."
+          text="Course announcements and order updates will appear here when available."
           to="/app/courses"
           label="Back to my courses"
         />
       )}
-      <p className="student-demo-callout">Notifications are stored in this browser preview. Instructor, course, and order alerts require a connected backend to arrive automatically.</p>
+      <p className="student-demo-callout">Notifications are stored in this browser preview. Course and order alerts require a connected backend to arrive automatically.</p>
     </div>
   );
 }
@@ -1594,14 +962,22 @@ export function ProfilePage() {
     ...readStudentData(getUserStorageKey(NOTIFICATION_PREFERENCES_KEY), {}),
   }));
   const [message, setMessage] = useState("");
+  const [messageIsError, setMessageIsError] = useState(false);
   const navigate = useNavigate();
   const supportEmail = readAdminData(adminStorageKeys.settings, {}).supportEmail?.trim() || "";
 
   function saveProfile(event) {
     event.preventDefault();
-    const updated = { ...currentUser, name: name.trim() };
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setMessage("Enter your full name.");
+      setMessageIsError(true);
+      return;
+    }
+    const updated = { ...currentUser, name: trimmedName };
     setCurrentUser(updated);
     setMessage("Profile name saved in this browser preview.");
+    setMessageIsError(false);
     window.dispatchEvent(new Event("ownTheme:profile-updated"));
   }
 
@@ -1610,6 +986,7 @@ export function ProfilePage() {
     setPreferences(updated);
     saveStudentData(getUserStorageKey(NOTIFICATION_PREFERENCES_KEY), updated);
     setMessage("Notification preferences saved in this browser preview.");
+    setMessageIsError(false);
   }
 
   function handleSignOut() {
@@ -1629,7 +1006,7 @@ export function ProfilePage() {
         <h2>Your profile</h2>
         <div className="field">
           <label htmlFor="profile-name">Full name</label>
-          <input id="profile-name" required value={name} onChange={(event) => setName(event.target.value)} />
+          <input id="profile-name" required value={name} onChange={(event) => { setName(event.target.value); setMessage(""); setMessageIsError(false); }} />
         </div>
         <div className="field">
           <label htmlFor="profile-email">Account email</label>
@@ -1637,7 +1014,7 @@ export function ProfilePage() {
           <small>Email changes and verification require the account service, which is not connected.</small>
         </div>
         <button className="btn btn-primary" type="submit">Save profile</button>
-        <SuccessMessage>{message}</SuccessMessage>
+        {messageIsError ? <ValidationError>{message}</ValidationError> : <SuccessMessage>{message}</SuccessMessage>}
         <div className="student-profile-image-note">
           <span className="student-profile-avatar" aria-hidden="true">{name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "S"}</span>
           <p><strong>{name || "Student"}</strong><span>Profile image upload is not supported in this preview.</span></p>
@@ -1650,8 +1027,6 @@ export function ProfilePage() {
         <p>These preferences are saved in this browser. Email and push notification delivery are not connected.</p>
         <div className="student-settings-preferences">
           {[
-            ["feedback", "Instructor feedback and revision requests"],
-            ["assignments", "Assignment status changes"],
             ["courses", "New course and lesson announcements"],
             ["billing", "Order and subscription status changes"],
           ].map(([key, label]) => (

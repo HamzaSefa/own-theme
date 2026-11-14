@@ -6,6 +6,8 @@ import {
   LessonManagement,
   MediaManagement,
   OrdersReview,
+  PlanManagement,
+  ShowcaseModeration,
   SiteSettings,
   StudentManagement,
 } from "./admin/Workspace";
@@ -19,6 +21,8 @@ const sections = [
   { id: "lessons", label: "Modules & lessons", icon: "list" },
   { id: "media", label: "Video & resources", icon: "video" },
   { id: "students", label: "Student management", icon: "users" },
+  { id: "showcase", label: "Showcase moderation", icon: "grid" },
+  { id: "plans", label: "Plans & bundles", icon: "receipt" },
   { id: "orders", label: "Orders & payments", icon: "receipt" },
   { id: "settings", label: "Site content & settings", icon: "settings" },
 ];
@@ -102,6 +106,7 @@ export default function Admin() {
                   : `/admin/${section.id}`;
             return (
               <button
+                type="button"
                 key={section.id}
                 className={active ? "side-btn active" : "side-btn"}
                 onClick={() => navigate(destination)}
@@ -123,6 +128,8 @@ export default function Admin() {
           {routeTab === "lessons" && <LessonManagement courseId={courseId} />}
           {routeTab === "media" && <MediaManagement />}
           {routeTab === "students" && <StudentManagement />}
+          {routeTab === "showcase" && <ShowcaseModeration />}
+          {routeTab === "plans" && <PlanManagement />}
           {routeTab === "orders" && <OrdersReview />}
           {routeTab === "settings" && <SiteSettings />}
         </main>

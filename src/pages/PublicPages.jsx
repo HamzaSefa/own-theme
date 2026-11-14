@@ -540,13 +540,10 @@ export function BundlesMembershipPage() {
 }
 
 export function ShowcasePage() {
-  const assignmentProjects = readAdminData(adminStorageKeys.assignments, []).filter(
-    (item) => item.showcasePublished && item.showcaseConsent && /^https?:\/\//i.test(item.url || ""),
-  );
   const managedProjects = readAdminData(adminStorageKeys.showcaseProjects, []).filter(
     (item) => item.showcasePublished && item.showcaseConsent && /^https?:\/\//i.test(item.mediaUrl || item.url || ""),
   ).map((item) => ({ ...item, url: item.mediaUrl || item.url, notes: item.description || "" }));
-  const published = [...assignmentProjects, ...managedProjects].map((item) => ({
+  const published = managedProjects.map((item) => ({
     ...item,
     slug: `${String(item.title || "student-project").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${String(item.id).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
     category: item.courseId === "short-form"
@@ -667,20 +664,6 @@ export function ShowcasePage() {
 
 export function ShowcaseProjectPage() {
   const { projectSlug } = useParams();
-  const assignmentProjects = readAdminData(adminStorageKeys.assignments, [])
-    .filter((item) => item.showcasePublished && item.showcaseConsent && /^https?:\/\//i.test(item.url || ""))
-    .map((item) => ({
-      ...item,
-      slug: `${String(item.title || "student-project").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${String(item.id).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
-      category: item.courseId === "short-form"
-        ? "Short-Form & Social Media"
-        : item.courseId === "long-form"
-          ? "Long-Form & YouTube"
-          : item.courseId === "film-doc"
-            ? "Film & Documentary"
-            : "Student projects",
-      student: true,
-    }));
   const managedProjects = readAdminData(adminStorageKeys.showcaseProjects, [])
     .filter((item) => item.showcasePublished && item.showcaseConsent && /^https?:\/\//i.test(item.mediaUrl || item.url || ""))
     .map((item) => ({
@@ -697,9 +680,8 @@ export function ShowcaseProjectPage() {
             : "Student projects",
       student: true,
     }));
-  const studentProjects = [...assignmentProjects, ...managedProjects];
   const project = showcase.find((item) => item.slug === projectSlug)
-    || studentProjects.find((item) => item.slug === projectSlug);
+    || managedProjects.find((item) => item.slug === projectSlug);
 
   if (!project) return <Navigate to="/showcase" replace />;
   const courseTitle = project.courseId
@@ -822,16 +804,14 @@ export function AboutPage() {
       <section className="about-process-section">
         <div className="plans-section-heading">
           <span className="eyebrow">THE LEARNING PROCESS</span>
-          <h2>Learn. Practice. Get feedback. Revise.</h2>
-          <p>Build a skill through making, reflection, and another pass.</p>
+          <h2>Learn. Practice. Develop your style.</h2>
+          <p>Build a skill through focused lessons, practical exercises, and your own creative decisions.</p>
         </div>
         <ol className="about-process-steps">
           {[
             ["01", "Learn", "Study a creative principle and see how it changes an edit."],
             ["02", "Practice", "Apply the idea to a guided exercise or your own project."],
-            ["03", "Submit", "Share an assignment for instructor review when that course activity is available."],
-            ["04", "Receive feedback", "Use specific feedback to understand what is working and what can be clearer."],
-            ["05", "Revise", "Make another pass and keep developing your own visual language."],
+            ["03", "Make it yours", "Use your own judgment to refine the edit and develop a recognizable visual language."],
           ].map(([number, title, description]) => (
             <li key={number}><span>{number}</span><div><h3>{title}</h3><p>{description}</p></div></li>
           ))}
@@ -962,8 +942,6 @@ export function FaqPage() {
     { q: "How long do I have access to a course?", a: "Published individual course purchases include lifetime access. The current demo does not connect real accounts or verify purchased access." },
     { q: "I have a payment issue. Was I charged?", a: "No payment provider is connected to this preview. It cannot charge you or verify a transaction. If a real charge occurs after launch, use the transaction reference and contact the configured support address." },
     { q: "How do I cancel a subscription?", a: "Subscription enrollment and billing are not available in this preview. Cancellation and renewal instructions will be published before any recurring plan opens." },
-    { q: "How do I submit an assignment?", a: "Assignment submission is available only in the signed-in student preview for eligible course lessons. Access and submission availability depend on course enrollment." },
-    { q: "When will I receive instructor feedback?", a: "Feedback timing has not been specified. Submitted work and feedback tools are demo data and do not send real instructor notifications." },
     ...faq,
   ];
   return (
@@ -971,7 +949,7 @@ export function FaqPage() {
       <PageIntro
         eyebrow="FAQ & SUPPORT"
         title="Help for your learning journey."
-        description="Find answers about enrollment, course access, playback, payments, assignments, and feedback. Support email is configured by the site administrator."
+        description="Find answers about enrollment, course access, playback, and payments. Support email is configured by the site administrator."
       />
       <div className="faq-list">
         {supportQuestions.map((item) => (

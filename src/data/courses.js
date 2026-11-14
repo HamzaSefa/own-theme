@@ -21,7 +21,7 @@ export const courses = [
           { id: "sf-1-1", title: "1.1 How attention works: hook, turn, payoff", duration: "10 min" },
           { id: "sf-1-2", title: "1.2 Setting up 9:16 and safe zones", duration: "8 min" },
           { id: "sf-1-3", title: "1.3 Lab: the same 20 seconds in two tools", duration: "14 min" },
-          { id: "sf-1-4", title: "1.4 Constraint and assignment brief", duration: "7 min" },
+          { id: "sf-1-4", title: "1.4 Creative constraints", duration: "7 min" },
         ],
       },
       {

@@ -1,31 +1,22 @@
-import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { adminStorageKeys, readAdminData } from "../data/adminWorkspace";
 
 export function ForgotPasswordPage() {
-  const [submitted, setSubmitted] = useState(false);
-
-  function requestReset(event) {
-    event.preventDefault();
-    setSubmitted(true);
-  }
-
   return (
     <main className="container public-page account-support-page">
       <header className="public-page-intro">
         <span className="eyebrow">ACCOUNT SUPPORT</span>
         <h1>Forgot your password?</h1>
-        <p>Password recovery email is not connected in this preview. No reset email will be sent.</p>
+        <p>This browser preview does not use or store passwords, and it has no account service to issue reset links.</p>
       </header>
-      <form className="auth-card" onSubmit={requestReset}>
-        <div className="field">
-          <label htmlFor="recovery-email">Email address</label>
-          <input id="recovery-email" type="email" required placeholder="you@email.com" />
+      <section className="account-unavailable-panel">
+        <h2>Password recovery is unavailable</h2>
+        <p>No reset request was submitted. You can continue with the local preview sign-in or contact support for account questions.</p>
+        <div className="hero-btns">
+          <Link to="/login" className="btn btn-primary">Back to sign in</Link>
+          <Link to="/contact" className="btn btn-outline">Contact support</Link>
         </div>
-        <button className="btn btn-primary btn-block" type="submit">Request a reset link</button>
-        {submitted && <p className="account-form-notice" role="status">Request recorded in this page only. Connect an email service to send password reset links.</p>}
-        <p className="auth-switch"><Link to="/login">Back to sign in</Link></p>
-      </form>
+      </section>
     </main>
   );
 }

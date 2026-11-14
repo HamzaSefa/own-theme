@@ -64,12 +64,12 @@ export default function Login() {
 
         <div className="field">
           <label htmlFor="login-email">Email</label>
-          <input type="email" required value={email}
+          <input type="email" autoComplete="email" required value={email}
             id="login-email" onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" />
         </div>
         <div className="field">
           <label htmlFor="login-password">Password (demo only)</label>
-          <input type="password" value={password}
+          <input type="password" autoComplete="current-password" value={password}
             id="login-password" onChange={(e) => setPassword(e.target.value)} placeholder="Optional in this preview" />
         </div>
 

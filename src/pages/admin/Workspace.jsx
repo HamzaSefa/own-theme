@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { courses, getProgress, student } from "../../data/courses";
 import { prices } from "../../data/admin";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { EmptyState, SuccessMessage, ValidationError } from "../../components/States";
 import {
   getUserEnrollments,
@@ -25,9 +25,6 @@ function SavedNotice({ children }) {
 function addStudentNotification(recipientEmail, notification) {
   if (!recipientEmail) return;
   const preferenceByType = {
-    instructor_feedback: "feedback",
-    revision_requested: "feedback",
-    assignment_status: "assignments",
     course_announcement: "courses",
     lesson_announcement: "courses",
     order_status: "billing",
@@ -224,7 +221,7 @@ export function LessonManagement({ courseId: routeCourseId }) {
   }
 
   function addModule() {
-    updateCatalog((item) => item.modules.push({ title: `Module ${item.modules.length + 1}`, description: "", lessons: [], assignments: [] }));
+    updateCatalog((item) => item.modules.push({ title: `Module ${item.modules.length + 1}`, description: "", lessons: [] }));
   }
 
   function updateModule(index, title) {
@@ -252,7 +249,6 @@ export function LessonManagement({ courseId: routeCourseId }) {
       resourceUrl: "",
       preview: false,
       accessStatus: "Enrollment-only",
-      assignmentTitle: "",
     }));
   }
 
@@ -269,6 +265,8 @@ export function LessonManagement({ courseId: routeCourseId }) {
   }
 
   function removeLesson(moduleIndex, lessonIndex) {
+    const lesson = course.modules[moduleIndex].lessons[lessonIndex];
+    if (!window.confirm(`Remove "${lesson.title || "this lesson"}"?`)) return;
     updateCatalog((item) => item.modules[moduleIndex].lessons.splice(lessonIndex, 1));
   }
 
@@ -295,18 +293,28 @@ export function LessonManagement({ courseId: routeCourseId }) {
       ? {
           ...item,
           curriculumStatus: status,
-          modules: item.modules.map((module) => ({
-            ...module,
-            lessons: module.lessons.map((lesson) => {
+          modules: item.modules.map((module) => {
+            const savedModule = { ...module };
+            delete savedModule.assignments;
+            delete savedModule.assignment;
+            delete savedModule.assignmentTitle;
+            delete savedModule.assignmentDescription;
+            return {
+              ...savedModule,
+              lessons: module.lessons.map((lesson) => {
               const savedLesson = { ...lesson };
               delete savedLesson.videoUrl;
               delete savedLesson.resourceUrl;
+              delete savedLesson.assignmentTitle;
+              delete savedLesson.assignmentDescription;
+              delete savedLesson.assignmentId;
               return {
                 ...savedLesson,
                 accessStatus: savedLesson.preview === true ? "Preview" : "Enrollment-only",
               };
             }),
-          })),
+            };
+          }),
         }
       : item);
     setCatalog(updated);
@@ -319,7 +327,7 @@ export function LessonManagement({ courseId: routeCourseId }) {
   return (
     <div className="admin-curriculum-management">
       <div className="admin-heading-row">
-        <div><h1>Module & lesson management</h1><p className="muted">Edit and order the curriculum, lesson content, access, and assignment links.</p></div>
+        <div><h1>Module & lesson management</h1><p className="muted">Edit and order the curriculum, lesson content, and access.</p></div>
         <button className="btn btn-primary" onClick={addModule} disabled={!course}>+ Add module</button>
       </div>
       {!routeCourseId && <select className="select" value={selectedCourseId} onChange={(event) => { setSelectedCourseId(event.target.value); setSaved(""); }} aria-label="Select course">
@@ -354,7 +362,6 @@ export function LessonManagement({ courseId: routeCourseId }) {
                 <label>Lesson description<textarea rows="3" value={lesson.description || ""} onChange={(e) => updateLesson(moduleIndex, lessonIndex, "description", e.target.value)} /></label>
                 <label>Lesson notes<textarea rows="3" value={lesson.notes || ""} onChange={(e) => updateLesson(moduleIndex, lessonIndex, "notes", e.target.value)} /></label>
                 <label>Resource title<input value={lesson.resourceTitle || ""} onChange={(e) => updateLesson(moduleIndex, lessonIndex, "resourceTitle", e.target.value)} placeholder="Optional display name" /></label>
-                <label>Connected assignment<input value={lesson.assignmentTitle || ""} onChange={(e) => updateLesson(moduleIndex, lessonIndex, "assignmentTitle", e.target.value)} placeholder="Assignment title or leave blank" /></label>
               </div>
               <label className="admin-course-visibility"><input type="checkbox" checked={lesson.preview === true} onChange={(event) => updateLessonPreview(moduleIndex, lessonIndex, event.target.checked)} /> Public preview lesson (otherwise enrollment-only)</label>
             </div>
@@ -534,7 +541,6 @@ export function StudentManagement() {
   const selectedStudent = students.find((item) => item.id === selectedId);
   const selectedEmail = selectedStudent?.email.toLowerCase();
   const orders = readAdminData(adminStorageKeys.orders, []).filter((item) => item.email?.toLowerCase() === selectedEmail);
-  const assignments = readAdminData(adminStorageKeys.assignments, []).filter((item) => item.studentEmail?.toLowerCase() === selectedEmail);
   const auditHistory = readAdminData(adminStorageKeys.auditLog, []).filter((item) => item.targetEmail?.toLowerCase() === selectedEmail).slice(0, 8);
   const currentEnrollments = selectedEmail
     ? getUserEnrollments(student.enrolled, selectedEmail)
@@ -597,9 +603,6 @@ export function StudentManagement() {
             </section>
             <section><h3>Purchase history</h3>
               {orders.length ? <ul>{orders.map((order) => <li key={order.id}>{order.item === "bundle" ? "Complete Bundle" : courses.find((course) => course.id === order.item)?.title || order.item} · {order.status || "Status unavailable"}{order.amount != null ? ` · $${order.amount}` : ""}</li>)}</ul> : <p className="muted">No purchase records found for this account.</p>}
-            </section>
-            <section><h3>Assignment history</h3>
-              {assignments.length ? <ul>{assignments.map((item) => <li key={item.id}>{item.title || "Assignment"} · {item.status || "Status unavailable"}</li>)}</ul> : <p className="muted">No assignment history found for this account.</p>}
             </section>
             <section><h3>Device session</h3>
               {selectedStudent.device ? <><p>{selectedStudent.device}<small> Active {selectedStudent.lastActive || "time unavailable"}</small></p><button className="btn btn-danger btn-sm" onClick={() => updateStudent(selectedStudent.id, (record) => ({ ...record, device: null }), { type: "demo_session_reset", summary: "Demo device session reset" })}>Reset demo session</button></> : <p className="muted">No active session recorded.</p>}
@@ -743,216 +746,6 @@ export function OrdersReview() {
   );
 }
 
-export function AssignmentReview({ submissionId = "" }) {
-  const [assignments, setAssignments] = useState(() => readAdminData(adminStorageKeys.assignments, []));
-  const [drafts, setDrafts] = useState({});
-  const [statuses, setStatuses] = useState({});
-  const [criterionDrafts, setCriterionDrafts] = useState({});
-  const [savedNotice, setSavedNotice] = useState("");
-  const navigate = useNavigate();
-  const statusesToReview = ["Submitted", "Under Review", "Revision Requested", "Completed"];
-  const submissions = assignments.filter((item) => item.status !== "Draft" && (item.submittedAt || statusesToReview.includes(item.status)));
-  const selectedSubmission = submissionId ? submissions.find((item) => item.id === submissionId) : null;
-
-  function updateAssignment(id, patch) {
-    const updated = assignments.map((item) => item.id === id ? { ...item, ...patch } : item);
-    setAssignments(updated);
-    writeAdminData(adminStorageKeys.assignments, updated);
-    return updated.find((item) => item.id === id);
-  }
-
-  function saveFeedback(item, requestedStatus) {
-    const feedback = (drafts[item.id] ?? item.feedback ?? "").trim();
-    const status = requestedStatus || statuses[item.id] || item.status || "Under Review";
-    const previousFeedback = item.feedbackHistory?.at(-1)?.comment || item.feedback || "";
-    const criteriaValues = criterionDrafts[item.id] || item.criterionFeedback || {};
-    const now = new Date().toISOString();
-    const criteria = Object.entries(criteriaValues)
-      .filter(([, comment]) => comment?.trim())
-      .map(([criterion, comment]) => `${criterion}: ${comment.trim()}`);
-    const changed = feedback !== previousFeedback || status !== item.status || JSON.stringify(criteriaValues) !== JSON.stringify(item.criterionFeedback || {});
-    if (!changed) {
-      setSavedNotice("No review changes to save.");
-      return;
-    }
-    const feedbackHistory = [
-      ...(item.feedbackHistory || []),
-      { comment: feedback, status, criteria, createdAt: now },
-    ];
-    const reviewHistory = [
-      ...(item.reviewHistory || []),
-      { status, comment: feedback, criteria, createdAt: now },
-    ];
-    updateAssignment(item.id, {
-      feedback,
-      feedbackHistory,
-      criterionFeedback: criteriaValues,
-      reviewHistory,
-      status,
-      revisionRequirements: status === "Revision Requested" ? feedback : "",
-      reviewedAt: now,
-    });
-    if (item.studentEmail) {
-      addStudentNotification(item.studentEmail, {
-        title: status === "Revision Requested" ? "Revision requested" : status === "Completed" ? "Assignment review complete" : "Instructor feedback received",
-        message: feedback || `${item.title} status changed to ${status}.`,
-        type: status === "Revision Requested" ? "revision_requested" : "instructor_feedback",
-        href: `/app/feedback/${item.id}`,
-      });
-    }
-    setSavedNotice("Review saved in this browser preview. No backend has confirmed this update.");
-  }
-
-  const getStudentName = (email) => getAdminStudents().find((record) => record.email?.toLowerCase() === email?.toLowerCase())?.name || email || "Student unavailable";
-  const previousSubmissions = selectedSubmission
-    ? submissions.filter((item) => item.id !== selectedSubmission.id
-      && item.assignmentId === selectedSubmission.assignmentId
-      && item.studentEmail?.toLowerCase() === selectedSubmission.studentEmail?.toLowerCase())
-      .sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0))
-    : [];
-  const criteria = Array.isArray(selectedSubmission?.criteria)
-    ? selectedSubmission.criteria
-    : selectedSubmission?.evaluationCriteria || [];
-  const selectedCourse = courses.find((course) => course.id === selectedSubmission?.courseId);
-  const configuredAssignment = selectedCourse?.modules.flatMap((module, moduleIndex) => {
-    const moduleAssignments = Array.isArray(module.assignments)
-      ? module.assignments
-      : module.assignment
-        ? [module.assignment]
-        : module.assignmentTitle
-          ? [{ title: module.assignmentTitle, description: module.assignmentDescription, criteria: module.criteria }]
-          : [];
-    return moduleAssignments.map((assignment, assignmentIndex) => ({
-      ...(typeof assignment === "string" ? { title: assignment } : assignment),
-      id: String(assignment.id || `${selectedCourse.id}-${moduleIndex}-${assignmentIndex}`),
-    }));
-  }).find((assignment) => assignment.id === selectedSubmission?.assignmentId || assignment.title === selectedSubmission?.title);
-  const assignmentBrief = selectedSubmission?.instructions || selectedSubmission?.objective || configuredAssignment?.instructions || configuredAssignment?.description;
-  const reviewCriteria = criteria.length ? criteria : configuredAssignment?.criteria || configuredAssignment?.evaluationCriteria || [];
-  const themeSheet = selectedSubmission?.themeSheetSnapshot;
-
-  return (
-    <div className="admin-assignment-review">
-      <h1>Assignment review queue</h1>
-      <p className="muted admin-description">Prioritize submitted work, review each submission and its history, then save structured feedback.</p>
-      {submissionId ? (
-        selectedSubmission ? (
-          <section className="admin-assignment-detail admin-edit-card">
-            <button type="button" className="btn btn-outline btn-sm" onClick={() => navigate("/admin/assignments")}>← Back to queue</button>
-            <div className="admin-heading-row">
-              <div><span className="eyebrow">{courses.find((course) => course.id === selectedSubmission.courseId)?.title || "Course unavailable"}</span><h2>{selectedSubmission.title || "Assignment submission"}</h2><p>{getStudentName(selectedSubmission.studentEmail)} · {selectedSubmission.studentEmail || "Email unavailable"}</p></div>
-              <span className="status-pill">{selectedSubmission.status || "Submitted"}</span>
-            </div>
-            <section className="admin-assignment-brief"><h3>Assignment brief & evaluation criteria</h3><p>{assignmentBrief || "Assignment brief was not copied into this submission."}</p>
-              {reviewCriteria.length ? <ul>{reviewCriteria.map((criterion, index) => <li key={`${index}-${typeof criterion === "string" ? criterion : criterion.title}`}>{typeof criterion === "string" ? criterion : criterion.title}{typeof criterion !== "string" && criterion.description ? ` — ${criterion.description}` : ""}</li>)}</ul> : <p className="muted">No evaluation criteria were recorded.</p>}
-            </section>
-            <section className="admin-assignment-brief"><h3>Student submission</h3><p>Submitted {selectedSubmission.submittedAt ? new Date(selectedSubmission.submittedAt).toLocaleString() : "date unavailable"}</p>
-              {selectedSubmission.url && /^https?:\/\//i.test(selectedSubmission.url) ? <a href={selectedSubmission.url} target="_blank" rel="noreferrer">Open submitted work ↗</a> : <p className="muted">No valid work link is attached.</p>}
-              <p>{selectedSubmission.notes || "No student note attached."}</p>
-            </section>
-            {themeSheet && <section className="admin-assignment-brief"><h3>Attached Theme Sheet · {themeSheet.title || "Untitled"}</h3>
-              {themeSheet.values && Object.entries(themeSheet.values).map(([element, value]) => value && <p key={element}><strong>{element}:</strong> {value}</p>)}
-            </section>}
-            {previousSubmissions.length > 0 && <section className="admin-assignment-brief"><h3>Previous submissions</h3><ul>{previousSubmissions.map((previous) => <li key={previous.id}><Link to={`/admin/assignments/${previous.id}`}>Revision {previous.revision || "—"} · {previous.status || "Status unavailable"} · {previous.submittedAt ? new Date(previous.submittedAt).toLocaleString() : "Date unavailable"}</Link>{previous.url && <a href={previous.url} target="_blank" rel="noreferrer"> · Open work ↗</a>}</li>)}</ul></section>}
-            <section className="admin-assignment-brief"><h3>Instructor review</h3>
-              <label className="admin-feedback-label">Instructor comments<textarea rows="5" value={drafts[selectedSubmission.id] ?? selectedSubmission.feedback ?? ""} onChange={(event) => setDrafts((current) => ({ ...current, [selectedSubmission.id]: event.target.value }))} placeholder="Share specific, constructive feedback…" /></label>
-              {reviewCriteria.length > 0 && <div className="admin-criterion-feedback"><h4>Feedback by criterion</h4>{reviewCriteria.map((criterion, index) => {
-                const title = typeof criterion === "string" ? criterion : criterion.title || `Criterion ${index + 1}`;
-                const current = criterionDrafts[selectedSubmission.id] || selectedSubmission.criterionFeedback || {};
-                return <label className="admin-feedback-label" key={`${index}-${title}`}>{title}<textarea rows="2" value={current[title] || ""} onChange={(event) => setCriterionDrafts((all) => ({ ...all, [selectedSubmission.id]: { ...(all[selectedSubmission.id] || selectedSubmission.criterionFeedback || {}), [title]: event.target.value } }))} placeholder="Optional notes for this criterion" /></label>;
-              })}</div>}
-              <label className="admin-feedback-label">Review status<select value={statuses[selectedSubmission.id] || selectedSubmission.status || "Submitted"} onChange={(event) => setStatuses((current) => ({ ...current, [selectedSubmission.id]: event.target.value }))}>{statusesToReview.map((status) => <option key={status}>{status}</option>)}</select></label>
-              <div className="admin-actions-inline">
-                <button type="button" className="btn btn-outline btn-sm" onClick={() => saveFeedback(selectedSubmission, "Under Review")}>Save review</button>
-                <button type="button" className="btn btn-outline btn-sm" onClick={() => saveFeedback(selectedSubmission, "Revision Requested")}>Request revision</button>
-                <button type="button" className="btn btn-outline btn-sm" onClick={() => saveFeedback(selectedSubmission, "Completed")}>Mark completed</button>
-                <button type="button" className="btn btn-primary btn-sm" onClick={() => saveFeedback(selectedSubmission)}>Send feedback</button>
-              </div>
-              {savedNotice && <SavedNotice>{savedNotice}</SavedNotice>}
-            </section>
-            <section className="admin-assignment-brief"><h3>Review history</h3>{selectedSubmission.reviewHistory?.length ? <ul>{[...selectedSubmission.reviewHistory].reverse().map((entry, index) => <li key={`${entry.createdAt}-${index}`}>{entry.status} · {new Date(entry.createdAt).toLocaleString()}{entry.comment ? ` — ${entry.comment}` : ""}</li>)}</ul> : <p className="muted">No instructor review history.</p>}</section>
-            <p className="admin-security-warning">This preview saves locally and may create a local notification; it cannot confirm a backend update. Production feedback and notifications must run only after the backend successfully saves the review.</p>
-          </section>
-        ) : <EmptyState title="Submission not found." description="This submission may have been removed or may still be a draft." actionLabel="Return to review queue" onAction={() => navigate("/admin/assignments")} icon="!" />
-      ) : submissions.length ? (
-        <>
-          <div className="admin-assignment-filters">{statusesToReview.map((status) => {
-            const count = submissions.filter((item) => item.status === status || (!item.status && status === "Submitted")).length;
-            return <a key={status} href={`#assignment-status-${status.replaceAll(" ", "-")}`}><span>{status}</span><strong>{count}</strong></a>;
-          })}</div>
-          {statusesToReview.map((status) => {
-            const records = submissions.filter((item) => item.status === status || (!item.status && status === "Submitted"));
-            if (!records.length) return null;
-            return <section className="admin-assignment-status-group" id={`assignment-status-${status.replaceAll(" ", "-")}`} key={status}>
-              <h2>{status}<span>{records.length}</span></h2>
-              <div className="admin-review-list">{records.map((item) => <article className="admin-review-card" key={item.id}>
-                <div className="admin-heading-row"><div><span className="eyebrow">{courses.find((course) => course.id === item.courseId)?.title || "Course unavailable"}</span><h3>{item.title || "Assignment submission"}</h3><p>{getStudentName(item.studentEmail)} · {item.studentEmail || "Email unavailable"}</p></div><span className="status-pill">{status}</span></div>
-                <p>{item.submittedAt ? `Submitted ${new Date(item.submittedAt).toLocaleString()}` : "Submission date unavailable"}</p>
-                <Link className="btn btn-primary btn-sm" to={`/admin/assignments/${item.id}`}>Review submission</Link>
-              </article>)}</div>
-            </section>;
-          })}
-        </>
-      ) : <EmptyState title="No submissions to review." description="Submitted assignments will appear in the queue when students send their work." icon="OT" />}
-      <p className="admin-disclaimer">Submission records, statuses, and local notifications are browser-preview data. Instructor review does not sync to a backend.</p>
-    </div>
-  );
-}
-
-export function InstructorFeedbackTools() {
-  const [assignments, setAssignments] = useState(() => readAdminData(adminStorageKeys.assignments, []).filter((item) => item.feedback || item.feedbackHistory?.length));
-  const [drafts, setDrafts] = useState({});
-  const [statuses, setStatuses] = useState({});
-
-  function saveFeedback(item) {
-    const fullList = readAdminData(adminStorageKeys.assignments, []);
-    const feedback = (drafts[item.id] ?? item.feedback ?? "").trim();
-    const status = statuses[item.id] || (["Feedback sent", "Submitted"].includes(item.status) ? "Under Review" : item.status) || "Under Review";
-    const previousFeedback = item.feedbackHistory?.at(-1)?.comment || item.feedback || "";
-    const feedbackHistory = feedback && feedback !== previousFeedback
-      ? [...(item.feedbackHistory || []), { comment: feedback, status, createdAt: new Date().toISOString() }]
-      : item.feedbackHistory || [];
-    const updated = fullList.map((record) => record.id === item.id ? {
-      ...record,
-      feedback,
-      feedbackHistory,
-      status,
-      revisionRequirements: status === "Revision Requested" ? feedback : "",
-    } : record);
-    writeAdminData(adminStorageKeys.assignments, updated);
-    setAssignments(updated.filter((record) => record.feedback || record.feedbackHistory?.length));
-    if (feedback !== previousFeedback || status !== item.status) {
-      addStudentNotification(item.studentEmail, {
-        title: status === "Revision Requested" ? "Revision requested" : status === "Completed" ? "Assignment review complete" : "Instructor feedback received",
-        message: feedback || `${item.title} status changed to ${status}.`,
-        type: status === "Revision Requested" ? "revision_requested" : "instructor_feedback",
-        href: `/app/feedback/${item.id}`,
-      });
-    }
-  }
-
-  return (
-    <>
-      <h1>Instructor feedback tools</h1>
-      <p className="muted admin-description">Review and refine feedback already sent to students.</p>
-      {assignments.length ? (
-        <div className="admin-review-list">
-          {assignments.map((item) => (
-            <article className="admin-review-card" key={item.id}>
-              <span className="eyebrow">{courses.find((c) => c.id === item.courseId)?.title || item.courseId}</span>
-              <h2>{item.title}</h2>
-              <p>{item.notes || "No student note provided."}</p>
-              <label className="admin-feedback-label">Feedback<textarea rows="4" value={drafts[item.id] ?? item.feedback ?? ""} onChange={(e) => setDrafts({ ...drafts, [item.id]: e.target.value })} /></label>
-              <label className="admin-feedback-label">Submission status<select value={statuses[item.id] || (["Feedback sent", "Submitted"].includes(item.status) ? "Under Review" : item.status) || "Under Review"} onChange={(e) => setStatuses({ ...statuses, [item.id]: e.target.value })}><option>Submitted</option><option>Under Review</option><option>Revision Requested</option><option>Completed</option></select></label>
-              <button className="btn btn-primary btn-sm" onClick={() => saveFeedback(item)}>Update feedback</button>
-            </article>
-          ))}
-        </div>
-      ) : <div className="student-empty"><h2>No feedback sent yet.</h2><p>Send feedback from the assignment review queue. It will be available to the student here.</p></div>}
-    </>
-  );
-}
-
 export function PlanManagement() {
   const [plans, setPlans] = useState(getAdminPlans);
   const [saved, setSaved] = useState(false);
@@ -1042,6 +835,7 @@ export function PlanManagement() {
                 <label>Availability<select value={bundle.availabilityStatus || "Available"} onChange={(event) => updateBundle(bundle.id, { availabilityStatus: event.target.value })}><option>Available</option><option>Paused</option><option>Sold out</option></select></label>
               </div>
               <button className="btn btn-danger btn-sm" type="button" onClick={() => {
+                if (!window.confirm(`Remove "${bundle.title || "this bundle"}"?`)) return;
                 setPlans((current) => ({ ...current, bundles: current.bundles.filter((item) => item.id !== bundle.id) }));
                 setSaved(false);
               }}>Remove bundle</button>
@@ -1081,67 +875,62 @@ export function PlanManagement() {
 }
 
 export function ShowcaseModeration() {
-  const [assignments, setAssignments] = useState(() => readAdminData(adminStorageKeys.assignments, []));
   const [projects, setProjects] = useState(() => readAdminData(adminStorageKeys.showcaseProjects, []));
-  const [notes, setNotes] = useState({});
-  const [filter, setFilter] = useState("All public requests");
+  const [filter, setFilter] = useState("All public projects");
 
   function moderate(item, action) {
     if (!item.showcaseConsent) return;
-    const moderationNote = notes[item.id]?.trim() || (action === "Changes Requested"
-      ? "Please update this project and resubmit it for review."
-      : action === "Rejected"
-        ? "This project was not approved for the public showcase."
-        : "");
-    const patch = {
-      showcasePublished: action === "Published",
-      moderationStatus: action,
-      moderationNote,
-      moderatedAt: new Date().toISOString(),
-    };
-    if (item.isShowcaseProject) {
-      const updated = projects.map((record) => record.id === item.id ? { ...record, ...patch } : record);
-      setProjects(updated);
-      writeAdminData(adminStorageKeys.showcaseProjects, updated);
-    } else {
-      const updated = assignments.map((record) => record.id === item.id ? { ...record, ...patch } : record);
-      setAssignments(updated);
-      writeAdminData(adminStorageKeys.assignments, updated);
-    }
+    const updated = projects.map((record) => {
+      if (record.id !== item.id) return record;
+      const project = { ...record };
+      delete project.moderationNote;
+      return {
+        ...project,
+        showcasePublished: action === "Published",
+        moderationStatus: action,
+        moderatedAt: new Date().toISOString(),
+      };
+    });
+    setProjects(updated);
+    writeAdminData(adminStorageKeys.showcaseProjects, updated);
     logAdminAction({
       type: "showcase_moderation",
       targetEmail: item.studentEmail || "",
       targetName: item.studentEmail || "",
-      summary: `${item.title}: ${action}`,
+      summary: item.title + ": " + action,
     });
     if (item.studentEmail) {
+      const title = action === "Published"
+        ? "Showcase project approved"
+        : action === "Removed"
+          ? "Showcase project removed"
+          : "Showcase project not approved";
+      const message = action === "Published"
+        ? "Your project is now published in the public showcase."
+        : action === "Removed"
+          ? "Your project was removed from the public showcase."
+          : "Your project was not approved for the public showcase.";
       addStudentNotification(item.studentEmail, {
-        title: action === "Published" ? "Showcase project approved" : action === "Changes Requested" ? "Showcase changes requested" : action === "Removed" ? "Showcase project removed" : "Showcase project not approved",
-        message: moderationNote || `Your project “${item.title}” is now ${action.toLowerCase()}.`,
+        title,
+        message,
         type: "showcase_moderation",
         href: "/app/showcase",
       });
     }
-    setNotes((current) => ({ ...current, [item.id]: "" }));
   }
 
-  const submissions = assignments.map((item) => ({ ...item, isShowcaseProject: false }));
-  const studentProjects = projects.map((item) => ({
-    ...item,
-    url: item.mediaUrl || item.url,
-    notes: item.description || "",
-    isShowcaseProject: true,
-  }));
-  const reviewItems = [...submissions, ...studentProjects]
+  const reviewItems = projects
     .filter((item) => item.showcaseConsent || item.showcasePublished)
     .map((item) => ({
       ...item,
-      moderationStatus: item.moderationStatus || (item.showcasePublished ? "Published" : "Pending review"),
+      moderationStatus: item.moderationStatus === "Changes Requested"
+        ? "Pending review"
+        : item.moderationStatus || (item.showcasePublished ? "Published" : "Pending review"),
     }));
-  const visibleItems = filter === "All public requests"
+  const visibleItems = filter === "All public projects"
     ? reviewItems
     : reviewItems.filter((item) => item.moderationStatus === filter);
-  const statusCounts = ["Pending review", "Changes Requested", "Published", "Rejected", "Removed"]
+  const statusCounts = ["Pending review", "Published", "Rejected", "Removed"]
     .map((status) => ({ status, count: reviewItems.filter((item) => item.moderationStatus === status).length }));
 
   return (
@@ -1149,31 +938,29 @@ export function ShowcaseModeration() {
       <h1>Showcase moderation</h1>
       <p className="muted admin-description">Review projects only when the creator has explicitly requested public display. Consent is required before publication.</p>
       <div className="admin-moderation-summary">
-        {statusCounts.map(({ status, count }) => <button type="button" className={filter === status ? "active" : ""} key={status} onClick={() => setFilter(filter === status ? "All public requests" : status)}><span>{status}</span><strong>{count}</strong></button>)}
+        {statusCounts.map(({ status, count }) => <button type="button" className={filter === status ? "active" : ""} key={status} onClick={() => setFilter(filter === status ? "All public projects" : status)}><span>{status}</span><strong>{count}</strong></button>)}
       </div>
-      <label className="admin-filter-label">Filter projects<select value={filter} onChange={(event) => setFilter(event.target.value)}><option>All public requests</option>{statusCounts.map(({ status }) => <option key={status}>{status}</option>)}</select></label>
+      <label className="admin-filter-label">Filter projects<select value={filter} onChange={(event) => setFilter(event.target.value)}><option>All public projects</option>{statusCounts.map(({ status }) => <option key={status}>{status}</option>)}</select></label>
       {visibleItems.length ? (
         <div className="admin-review-list">
           {visibleItems.map((item) => (
             <article className="admin-review-card" key={item.id}>
               <div className="admin-heading-row">
-                <div><span className="eyebrow">{courses.find((c) => c.id === item.courseId)?.title || item.courseId || "Own Theme project"}</span><h2>{item.title || "Untitled project"}</h2><p>{item.studentEmail || "Creator unavailable"}{item.assignmentId ? ` · Assignment ${item.assignmentId}` : ""}</p>{/^https?:\/\//i.test(item.url || "") && <a href={item.url} target="_blank" rel="noreferrer">Open project ↗</a>}</div>
+                <div><span className="eyebrow">{courses.find((course) => course.id === item.courseId)?.title || item.courseId || "Own Theme project"}</span><h2>{item.title || "Untitled project"}</h2><p>{item.studentEmail || "Creator unavailable"}</p>{/^https?:\/\//i.test(item.mediaUrl || item.url || "") && <a href={item.mediaUrl || item.url} target="_blank" rel="noreferrer">Open project &rarr;</a>}</div>
                 <span className="status-pill">{item.moderationStatus}</span>
               </div>
-              <p>{item.notes || "No student note provided."}</p>
-              <p className="admin-consent granted">Creator requested public display · consent recorded.</p>
-              <label className="admin-feedback-label">Moderation note<textarea rows="2" value={notes[item.id] ?? item.moderationNote ?? ""} onChange={(event) => setNotes((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Optional feedback for the creator" /></label>
+              <p>{item.description || "No project description provided."}</p>
+              <p className="admin-consent granted">Creator requested public display - consent recorded.</p>
               <div className="admin-actions-inline">
-                <button className="btn btn-primary btn-sm" disabled={!/^https?:\/\//i.test(item.url || "")} onClick={() => moderate(item, "Published")}>Approve & publish</button>
-                <button className="btn btn-outline btn-sm" onClick={() => moderate(item, "Changes Requested")}>Request changes</button>
+                <button className="btn btn-primary btn-sm" disabled={!/^https?:\/\//i.test(item.mediaUrl || item.url || "")} onClick={() => moderate(item, "Published")}>Approve & publish</button>
                 <button className="btn btn-outline btn-sm" onClick={() => moderate(item, "Rejected")}>Reject</button>
                 {item.showcasePublished && <button className="btn btn-danger btn-sm" onClick={() => moderate(item, "Removed")}>Remove published project</button>}
               </div>
             </article>
           ))}
         </div>
-      ) : <EmptyState title={filter === "All public requests" ? "No public projects to review." : `No ${filter.toLowerCase()} projects.`} description="Projects appear here only after a student requests public display and records consent." icon="OT" />}
-      <p className="admin-disclaimer">Moderation decisions and notifications are saved in this browser preview. A production workflow must persist them on the server and verify administrator permissions.</p>
+      ) : <EmptyState title={filter === "All public projects" ? "No public projects to review." : "No " + filter.toLowerCase() + " projects."} description="Projects appear here only after a student requests public display and records consent." icon="OT" />}
+      <p className="admin-disclaimer">Publication decisions and notifications are saved in this browser preview. A production workflow must persist them on the server and verify administrator permissions.</p>
     </>
   );
 }
@@ -1189,7 +976,7 @@ export function SiteSettings() {
     categories: ["Short-Form & Social Media", "Long-Form & YouTube", "Film & Documentary"],
     featuredCourseIds: ["short-form", "long-form", "film-doc"],
     legalContent: { terms: "", privacy: "", refund: "" },
-    emailNotifications: { feedback: true, assignments: true, courses: true, billing: true },
+    emailNotifications: { courses: true, billing: true },
   });
   const [settings, setSettings] = useState({
     supportPhone: "",
@@ -1198,7 +985,7 @@ export function SiteSettings() {
     categories: ["Short-Form & Social Media", "Long-Form & YouTube", "Film & Documentary"],
     featuredCourseIds: ["short-form", "long-form", "film-doc"],
     legalContent: { terms: "", privacy: "", refund: "" },
-    emailNotifications: { feedback: true, assignments: true, courses: true, billing: true },
+    emailNotifications: { courses: true, billing: true },
     ...initial,
   });
   const [saved, setSaved] = useState(false);
@@ -1247,7 +1034,7 @@ export function SiteSettings() {
         <label>Privacy policy<textarea rows="5" value={settings.legalContent?.privacy || ""} onChange={(event) => updateSettings("legalContent", { ...settings.legalContent, privacy: event.target.value })} placeholder="Reviewed privacy policy" /></label>
         <label>Refund & cancellation policy<textarea rows="5" value={settings.legalContent?.refund || ""} onChange={(event) => updateSettings("legalContent", { ...settings.legalContent, refund: event.target.value })} placeholder="Reviewed refund and cancellation terms" /></label>
         <h2>Email notification settings</h2>
-        <fieldset className="admin-course-checkboxes">{Object.entries({ feedback: "Instructor feedback", assignments: "Assignment updates", courses: "Course announcements", billing: "Orders and billing" }).map(([key, label]) => <label key={key}><input type="checkbox" checked={settings.emailNotifications?.[key] !== false} onChange={(event) => updateSettings("emailNotifications", { ...settings.emailNotifications, [key]: event.target.checked })} />{label}</label>)}</fieldset>
+        <fieldset className="admin-course-checkboxes">{Object.entries({ courses: "Course announcements", billing: "Orders and billing" }).map(([key, label]) => <label key={key}><input type="checkbox" checked={settings.emailNotifications?.[key] !== false} onChange={(event) => updateSettings("emailNotifications", { ...settings.emailNotifications, [key]: event.target.checked })} />{label}</label>)}</fieldset>
         <p className="muted">These are configuration preferences only. No email delivery service is connected.</p>
         <h2>Integration status</h2>
         <div className="admin-integration-status"><p><strong>Hosted video:</strong> Not connected in this preview</p><p><strong>Payment provider:</strong> Not connected in this preview</p><p>Do not enter provider secrets here. Integrations require server-side credentials and verified callbacks.</p></div>

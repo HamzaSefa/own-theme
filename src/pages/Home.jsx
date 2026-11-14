@@ -16,6 +16,7 @@ export default function Home() {
   const headline = siteSettings.homeHeadline || "Edit And Create Your Own Style.";
   const highlightedPhrase = "Create Your Own Style.";
   const highlightIndex = headline.indexOf(highlightedPhrase);
+  const styleIndex = highlightIndex + highlightedPhrase.indexOf("Style");
 
   return (
     <>
@@ -25,7 +26,7 @@ export default function Home() {
             <div className="hero-copy">
               <span className="badge"><span className="badge-dot" />VIDEO EDITING COURSES</span>
               <h1>{highlightIndex >= 0
-                ? <>{headline.slice(0, highlightIndex)}<span>{highlightedPhrase}</span>{headline.slice(highlightIndex + highlightedPhrase.length)}</>
+                ? <>{headline.slice(0, highlightIndex)}<span>{headline.slice(highlightIndex, styleIndex)}<em className="hero-style-word">{headline.slice(styleIndex, styleIndex + "Style".length)}</em>{headline.slice(styleIndex + "Style".length, highlightIndex + highlightedPhrase.length)}</span>{headline.slice(highlightIndex + highlightedPhrase.length)}</>
                 : headline}</h1>
               <p>{siteSettings.homeDescription || "Learn video editing, master visual storytelling, and turn your ideas into videos that stand out."}</p>
               <div className="hero-btns">

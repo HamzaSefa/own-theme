@@ -87,7 +87,7 @@ export default function Overview() {
         <div className="admin-overview-section-heading"><h2>Course & content management</h2></div>
         <div className="admin-overview-shortcuts">
           <Link to="/admin/courses"><strong>Manage courses</strong><span>Create courses, edit details, and set publication status ↗</span></Link>
-          <Link to={`/admin/courses/${courses[0]?.id || ""}`}><strong>Manage curriculum</strong><span>Organize modules, lessons, videos, and assignments ↗</span></Link>
+          <Link to={`/admin/courses/${courses[0]?.id || ""}`}><strong>Manage curriculum</strong><span>Organize modules, lessons, and videos ↗</span></Link>
           <Link to="/admin/media"><strong>Video & resources</strong><span>Review hosted video and resource references ↗</span></Link>
         </div>
       </section>

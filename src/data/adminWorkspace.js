@@ -2,7 +2,6 @@ import { initialStudents, sales } from "./admin";
 import { student } from "./courses";
 
 export const adminStorageKeys = {
-  assignments: "ownTheme_assignments",
   showcaseProjects: "ownTheme_showcase_projects",
   courses: "ownTheme_managed_courses",
   orders: "ownTheme_orders",
